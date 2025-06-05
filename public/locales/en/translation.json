@@ -1,4 +1,9 @@
 {
-  "title": "Create your App",
-  "description": "Build your app on top of Convex SaaS, explore the documentation and start your journey."
+  "craftYourVideo": "Craft Your Video",
+  "selectMode": "Select Mode",
+  "scriptTitle": "I have a script ready",
+  "guidedTitle": "Let AI write your story",
+  "segmentTitle": "Create story segment by segment",
+  "guidedStoryCreation": "Guided Story Creation",
+  "prompt": "Prompt"
 }

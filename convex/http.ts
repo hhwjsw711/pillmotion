@@ -58,8 +58,8 @@ const handleUpdateSubscription = async (
       priceStripeId: subscriptionItem.price.id,
       interval: subscriptionItem.plan.interval as Interval,
       status: subscription.status,
-      currentPeriodStart: subscription.current_period_start,
-      currentPeriodEnd: subscription.current_period_end,
+      currentPeriodStart: subscriptionItem.current_period_start,
+      currentPeriodEnd: subscriptionItem.current_period_end,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
     },
   });
