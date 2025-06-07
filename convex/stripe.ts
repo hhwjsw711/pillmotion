@@ -8,10 +8,23 @@ import {
 import { v } from "convex/values";
 import { ERRORS } from "~/errors";
 import { auth } from "@cvx/auth";
-import { currencyValidator, intervalValidator, PLANS } from "@cvx/schema";
+import {
+  currencyValidator,
+  intervalValidator,
+  PLANS,
+  PriceId,
+  priceIdValidator,
+} from "@cvx/schema";
 import { api, internal } from "~/convex/_generated/api";
 import { SITE_URL, STRIPE_SECRET_KEY } from "@cvx/env";
 import { asyncMap } from "convex-helpers";
+import { STRIPE_SMALL_CREDIT_PACK, STRIPE_MEDIUM_CREDIT_PACK, STRIPE_LARGE_CREDIT_PACK } from "@cvx/env";
+
+const PRICE_IDS: Record<PriceId, string> = {
+  small: STRIPE_SMALL_CREDIT_PACK || "",
+  medium: STRIPE_MEDIUM_CREDIT_PACK || "",
+  large: STRIPE_LARGE_CREDIT_PACK || "",
+};
 
 /**
  * TODO: Uncomment to require Stripe keys.
@@ -386,5 +399,30 @@ export const cancelCurrentUserSubscriptions = internalAction({
     await asyncMap(subscriptions, async (subscription) => {
       await stripe.subscriptions.cancel(subscription.data[0].subscription);
     });
+  },
+});
+
+export const createCheckoutSession = action({
+  args: {
+    priceId: priceIdValidator,
+  },
+  handler: async (ctx, args): Promise<string | undefined> => {
+    const user = await ctx.runQuery(api.app.getCurrentUser);
+    if (!user || !user.customerId) {
+      throw new Error(ERRORS.STRIPE_SOMETHING_WENT_WRONG);
+    }
+
+    const checkout = await stripe.checkout.sessions.create({
+      customer: user.customerId,
+      line_items: [{ price: PRICE_IDS[args.priceId], quantity: 1 }],
+      mode: "payment",
+      payment_method_types: ["card"],
+      success_url: `${SITE_URL}/dashboard`,
+      cancel_url: `${SITE_URL}/`,
+    });
+    if (!checkout) {
+      throw new Error(ERRORS.STRIPE_SOMETHING_WENT_WRONG);
+    }
+    return checkout.url || undefined;
   },
 });

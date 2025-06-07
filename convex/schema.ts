@@ -32,6 +32,13 @@ export const planKeyValidator = v.union(
 );
 export type PlanKey = Infer<typeof planKeyValidator>;
 
+export const priceIdValidator = v.union(
+  v.literal("small"),
+  v.literal("medium"),
+  v.literal("large"),
+);
+export type PriceId = Infer<typeof priceIdValidator>;
+
 const priceValidator = v.object({
   stripeId: v.string(),
   amount: v.number(),
@@ -54,6 +61,7 @@ const schema = defineSchema({
     phoneVerificationTime: v.optional(v.number()),
     isAnonymous: v.optional(v.boolean()),
     customerId: v.optional(v.string()),
+    credits: v.optional(v.number()),
   })
     .index("email", ["email"])
     .index("customerId", ["customerId"]),

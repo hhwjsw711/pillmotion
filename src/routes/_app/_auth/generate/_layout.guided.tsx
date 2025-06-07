@@ -1,16 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
-export const Route = createFileRoute("/_app/_auth/dashboard/_layout/guided")({
-  component: DashboardGuided,
-  beforeLoad: () => ({
-    title: "Dashboard",
-    headerTitle: "Dashboard",
-    headerDescription: "Manage your Apps and view your usage.",
-  }),
+export const Route = createFileRoute('/_app/_auth/generate/_layout/guided')({
+  component: GenerateGuided,
 });
 
-export default function DashboardGuided() {
+export default function GenerateGuided() {
   const { t } = useTranslation();
 
   return (

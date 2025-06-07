@@ -19,17 +19,17 @@ export default function Dashboard() {
 
   const apps = [
     {
-      to: "/dashboard/script",
+      to: "/generate/script",
       icon: <Pencil className="h-8 w-8 stroke-[1.5px] text-primary/60" />,
       title: t("scriptTitle"),
     },
     {
-      to: "/dashboard/guided",
+      to: "/generate/guided",
       icon: <Wand2 className="h-8 w-8 stroke-[1.5px] text-primary/60" />,
       title: t("guidedTitle"),
     },
     {
-      to: "/dashboard/segment",
+      to: "/generate/segment",
       icon: <List className="h-8 w-8 stroke-[1.5px] text-primary/60" />,
       title: t("segmentTitle"),
     },

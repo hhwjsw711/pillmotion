@@ -1,12 +1,138 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import type { VariantProps } from "class-variance-authority";
 import { cn } from "@/utils/misc";
+import { Button } from "@/ui/button";
 import { buttonVariants } from "@/ui/button-util";
-import { Check, Loader2 } from "lucide-react";
+import { Loader2, CheckIcon } from "lucide-react";
 import { ThemeSwitcherHome } from "@/ui/theme-switcher";
 import ShadowPNG from "/images/shadow.png";
 import { useConvexAuth } from "@convex-dev/react-query";
 import { Route as AuthLoginRoute } from "@/routes/_app/login/_layout.index";
 import { Route as DashboardRoute } from "@/routes/_app/_auth/dashboard/_layout.index";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/ui/card";
+import type { PriceId } from "@cvx/schema";
+import { useConvexAction } from "@convex-dev/react-query";
+import { useMutation } from "@tanstack/react-query";
+import { api } from "~/convex/_generated/api";
+
+interface PricingPlan {
+  title: string;
+  price: string;
+  description: string;
+  features: string[];
+  buttonText: string;
+  buttonVariant: VariantProps<typeof buttonVariants>["variant"];
+  isPopular?: boolean;
+  savePercentage?: string;
+  priceId: PriceId;
+}
+
+const plans: PricingPlan[] = [
+  {
+    title: "Small Pack",
+    price: "$9.99",
+    description: "Generate and export around 5 videos",
+    features: ["50 credits", "No expiration", "No watermark"],
+    buttonText: "Buy 50 credits",
+    buttonVariant: "outline",
+    priceId: "small",
+  },
+  {
+    title: "Medium Pack",
+    price: "$24.99",
+    description: "Generate and export around 13 videos",
+    features: ["150 credits", "No expiration", "No watermark"],
+    buttonText: "Buy 150 credits",
+    buttonVariant: "default",
+    isPopular: true,
+    savePercentage: "Save 17%",
+    priceId: "medium",
+  },
+  {
+    title: "Large Pack",
+    price: "$69.99",
+    description: "Generate and export around 33 videos",
+    features: ["500 credits", "No expiration", "No watermark"],
+    buttonText: "Buy 500 credits",
+    buttonVariant: "outline",
+    isPopular: false,
+    savePercentage: "Save 30%",
+    priceId: "large",
+  },
+];
+
+function PricingCard({ plan }: { plan: PricingPlan }) {
+  const { mutateAsync: createCheckoutSession, isPending } = useMutation({
+    mutationFn: useConvexAction(api.stripe.createCheckoutSession),
+  });
+  const handleCreateSubscriptionCheckout = async () => {
+    const checkoutUrl = await createCheckoutSession({
+      priceId: plan.priceId,
+    });
+    if (!checkoutUrl) {
+      return;
+    }
+    window.location.href = checkoutUrl;
+  };
+  return (
+    <Card
+      className={cn(
+        "relative flex flex-col",
+        plan.isPopular && "border-primary border-2",
+      )}
+    >
+      {plan.isPopular && (
+        <div className="bg-primary text-primary-foreground absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 transform rounded-full px-3 py-1 text-sm font-medium whitespace-nowrap">
+          Most Popular
+        </div>
+      )}
+      <CardHeader className="flex-1">
+        <CardTitle>{plan.title}</CardTitle>
+        <div className="text-4xl font-bold">{plan.price} </div>
+        {plan.savePercentage && (
+          <p className="text-sm font-medium text-green-600">
+            {plan.savePercentage}
+          </p>
+        )}
+        <CardDescription>{plan.description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <ul className="text-muted-foreground space-y-2 text-sm">
+          {plan.features.map((feature, index) => (
+            <li key={index} className="flex items-center gap-2">
+              <CheckIcon className="text-primary size-4" />
+              {feature}
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+      <CardFooter>
+        <Button
+          variant={plan.buttonVariant}
+          className="w-full"
+          onClick={handleCreateSubscriptionCheckout}
+          disabled={isPending}
+        >
+          {isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Processing...
+            </>
+          ) : (
+            plan.buttonText
+          )}
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -68,132 +194,20 @@ function Index() {
           </div>
         </div>
 
-        <div className="flex w-full flex-col items-center justify-center gap-2">
-          <h2 className="text-center font-serif text-xl font-medium">
-            Pricing
-          </h2>
-          <p className="text-lg text-primary/60">
+        <div className="space-y-2 text-center">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-4xl">
+            Buy Credits
+          </h1>
+          <p className="text-muted-foreground">
             Purchase credits for generating images, refining scripts, and
             exporting your videos.
           </p>
         </div>
-        <div className="relative z-10 flex flex-col border border-border backdrop-blur-sm lg:flex-row">
-          <div className="flex w-full flex-col items-start justify-center gap-6 border-r border-primary/10 p-10 lg:p-12 **lg:w-1/3**">
-            <h2 className="text-xl mb-2 text-left">Basic</h2>
-            <div className="mt-1 flex items-baseline">
-              <span className="text-2xl font-medium tracking-tight">$9</span>
-              <span className="ml-1 text-xl font-medium">/mo</span>
-              <span className="ml-2 text-xs text-muted-foreground">
-                Excl. VAT
-              </span>
-            </div>
-            <div className="mt-4">
-              <h3 className="text-xs font-medium uppercase tracking-wide text-left text-[#878787] font-mono">
-                INCLUDING
-              </h3>
-              <ul className="mt-4 space-y-2">
-                <li className="flex items-start">
-                  <Check className="h-4 w-4 text-primary flex-shrink-0 mr-2" />
-                  <span className="text-xs">
-                    Generate and export around 5 videos
-                  </span>
-                </li>
-              </ul>
-            </div>
-            <Link
-              to={AuthLoginRoute.fullPath}
-              className={cn(
-                `${buttonVariants({ variant: "outline", size: "sm" })} dark:bg-secondary dark:hover:opacity-80`,
-              )}
-            >
-              Choose basic plan
-            </Link>
-          </div>
 
-          <div className="flex w-full flex-col items-start justify-center gap-6 border-r border-primary/10 p-10 lg:p-12 **lg:w-1/3**">
-            <h2 className="text-xl mb-2 text-left">Pro</h2>
-            <div className="mt-1 flex items-baseline">
-              <span className="text-2xl font-medium tracking-tight">$19</span>
-              <span className="ml-1 text-xl font-medium">/mo</span>
-              <span className="ml-2 text-xs text-muted-foreground">
-                Excl. VAT
-              </span>
-            </div>
-            <div className="mt-4">
-              <h3 className="text-xs font-medium uppercase tracking-wide text-left text-[#878787] font-mono">
-                INCLUDING
-              </h3>
-              <ul className="mt-4 space-y-2">
-                <li className="flex items-start">
-                  <Check className="h-4 w-4 text-primary flex-shrink-0 mr-2" />
-                  <span className="text-xs">
-                    Generate and export around 13 videos
-                  </span>
-                </li>
-              </ul>
-            </div>
-            <Link
-              to={AuthLoginRoute.fullPath}
-              className={cn(
-                `${buttonVariants({ variant: "outline", size: "sm" })} dark:bg-secondary dark:hover:opacity-80`,
-              )}
-            >
-              Choose pro plan
-            </Link>
-          </div>
-
-          <div className="flex w-full flex-col items-start justify-center gap-6 p-10 **lg:w-1/3** lg:border-b-0 lg:p-12">
-            {" "}
-            <div className="absolute top-6 right-6 rounded-full text-[#878787] text-[9px] font-normal border px-2 py-1 font-mono">
-              Limited offer
-            </div>
-            <h2 className="text-xl text-left mb-2">Max</h2>
-            <div className="mt-1 flex items-baseline">
-              <span
-                className={cn(
-                  "text-2xl font-medium tracking-tight",
-                  "line-through text-[#878787]",
-                )}
-              >
-                $49
-              </span>
-              <span className="ml-1 text-2xl font-medium tracking-tight">
-                $29
-              </span>
-              <span className="ml-1 text-xl font-medium">/mo</span>
-              <span className="ml-2 text-xs text-muted-foreground">
-                Excl. VAT
-              </span>
-            </div>
-            <div className="mt-4">
-              <h3 className="text-xs font-medium uppercase tracking-wide text-left text-[#878787] font-mono">
-                INCLUDING
-              </h3>
-              <ul className="mt-4 space-y-2">
-                <li className="flex items-start">
-                  <Check className="h-4 w-4 text-primary flex-shrink-0 mr-2" />
-                  <span className="text-xs">
-                    Generate and export around 33 videos
-                  </span>
-                </li>
-              </ul>
-            </div>
-            <Link
-              to={AuthLoginRoute.fullPath}
-              className={buttonVariants({ size: "sm" })}
-            >
-              Choose max plan
-            </Link>
-          </div>
-
-          <div className="absolute left-0 top-0 z-10 flex flex-col items-center justify-center">
-            <span className="absolute h-6 w-[1px] bg-primary/40" />
-            <span className="absolute h-[1px] w-6 bg-primary/40" />
-          </div>
-          <div className="absolute bottom-0 right-0 z-10 flex flex-col items-center justify-center">
-            <span className="absolute h-6 w-[1px] bg-primary/40" />
-            <span className="absolute h-[1px] w-6 bg-primary/40" />
-          </div>
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+          {plans.map((plan) => (
+            <PricingCard key={plan.title} plan={plan} />
+          ))}
         </div>
 
         <div className="z-10 flex h-full w-full flex-col items-center justify-center gap-6 p-12">

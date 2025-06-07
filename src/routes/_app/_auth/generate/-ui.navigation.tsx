@@ -1,8 +1,4 @@
 import {
-  ChevronUp,
-  ChevronDown,
-  Slash,
-  Check,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -12,28 +8,20 @@ import { LanguageSwitcher } from "@/ui/language-switcher";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuLabel,
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/ui/dropdown-menu";
 import { Button } from "@/ui/button";
-import { buttonVariants } from "@/ui/button-util";
-import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Route as DashboardRoute } from "@/routes/_app/_auth/dashboard/_layout.index";
 import { Route as SettingsRoute } from "@/routes/_app/_auth/dashboard/_layout.settings.index";
-import { Route as BillingSettingsRoute } from "@/routes/_app/_auth/dashboard/_layout.settings.billing";
 import { User } from "~/types";
-import { PLANS } from "@cvx/schema";
 import { Badge } from "@/ui/badge";
 
 export function Navigation({ user }: { user: User }) {
   const signOut = useSignOut();
-  const matchRoute = useMatchRoute();
   const navigate = useNavigate();
-  const isDashboardPath = matchRoute({ to: DashboardRoute.fullPath });
-  const isSettingsPath = matchRoute({ to: SettingsRoute.fullPath });
-  const isBillingPath = matchRoute({ to: BillingSettingsRoute.fullPath });
 
   if (!user) {
     return null;
@@ -144,54 +132,6 @@ export function Navigation({ user }: { user: User }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      </div>
-
-      <div className="mx-auto flex w-full max-w-screen-xl items-center gap-3">
-        <div
-          className={cn(
-            `flex h-12 items-center border-b-2`,
-            isDashboardPath ? "border-primary" : "border-transparent",
-          )}
-        >
-          <Link
-            to={DashboardRoute.fullPath}
-            className={cn(
-              `${buttonVariants({ variant: "ghost", size: "sm" })} text-primary/80`,
-            )}
-          >
-            Dashboard
-          </Link>
-        </div>
-        <div
-          className={cn(
-            `flex h-12 items-center border-b-2`,
-            isSettingsPath ? "border-primary" : "border-transparent",
-          )}
-        >
-          <Link
-            to={SettingsRoute.fullPath}
-            className={cn(
-              `${buttonVariants({ variant: "ghost", size: "sm" })} text-primary/80`,
-            )}
-          >
-            Settings
-          </Link>
-        </div>
-        <div
-          className={cn(
-            `flex h-12 items-center border-b-2`,
-            isBillingPath ? "border-primary" : "border-transparent",
-          )}
-        >
-          <Link
-            to={BillingSettingsRoute.fullPath}
-            className={cn(
-              `${buttonVariants({ variant: "ghost", size: "sm" })} text-primary/80`,
-            )}
-          >
-            Billing
-          </Link>
         </div>
       </div>
     </nav>

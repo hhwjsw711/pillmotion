@@ -13,6 +13,7 @@ import {
 } from "@cvx/email/templates/subscriptionEmail";
 import Stripe from "stripe";
 import { Doc } from "@cvx/_generated/dataModel";
+import { STRIPE_SMALL_CREDIT_PACK, STRIPE_MEDIUM_CREDIT_PACK, STRIPE_LARGE_CREDIT_PACK } from "@cvx/env";
 
 const http = httpRouter();
 
@@ -71,48 +72,90 @@ const handleCheckoutSessionCompleted = async (
 ) => {
   const session = event.data.object;
 
-  const { customer: customerId, subscription: subscriptionId } = z
-    .object({ customer: z.string(), subscription: z.string() })
-    .parse(session);
+  if (session.mode === "subscription" && session.subscription) {
+    const { customer: customerId, subscription: subscriptionId } = z
+      .object({ customer: z.string(), subscription: z.string() })
+      .parse(session);
 
-  const user = await ctx.runQuery(internal.stripe.PREAUTH_getUserByCustomerId, {
-    customerId,
-  });
-  if (!user?.email) {
-    throw new Error(ERRORS.SOMETHING_WENT_WRONG);
-  }
-
-  const freeSubscriptionStripeId =
-    user.subscription.planKey === PLANS.FREE
-      ? user.subscription.stripeId
-      : undefined;
-
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-
-  await handleUpdateSubscription(ctx, user, subscription);
-
-  await sendSubscriptionSuccessEmail({
-    email: user.email,
-    subscriptionId,
-  });
-
-  // Cancel free subscription. — User upgraded to a paid plan.
-  // Not required, but it's a good practice to keep just a single active plan.
-  const subscriptions = (
-    await stripe.subscriptions.list({ customer: customerId })
-  ).data.map((sub) => sub.items);
-
-  if (subscriptions.length > 1) {
-    const freeSubscription = subscriptions.find((sub) =>
-      sub.data.some(
-        ({ subscription }) => subscription === freeSubscriptionStripeId,
-      ),
+    const user = await ctx.runQuery(
+      internal.stripe.PREAUTH_getUserByCustomerId,
+      {
+        customerId,
+      },
     );
-    if (freeSubscription) {
-      await stripe.subscriptions.cancel(freeSubscription?.data[0].subscription);
+    if (!user?.email) {
+      throw new Error(ERRORS.SOMETHING_WENT_WRONG);
+    }
+
+    const freeSubscriptionStripeId =
+      user.subscription.planKey === PLANS.FREE
+        ? user.subscription.stripeId
+        : undefined;
+
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+
+    await handleUpdateSubscription(ctx, user, subscription);
+
+    await sendSubscriptionSuccessEmail({
+      email: user.email,
+      subscriptionId,
+    });
+
+    // Cancel free subscription. — User upgraded to a paid plan.
+    // Not required, but it's a good practice to keep just a single active plan.
+    const subscriptions = (
+      await stripe.subscriptions.list({ customer: customerId })
+    ).data.map((sub) => sub.items);
+
+    if (subscriptions.length > 1) {
+      const freeSubscription = subscriptions.find((sub) =>
+        sub.data.some(
+          ({ subscription }) => subscription === freeSubscriptionStripeId,
+        ),
+      );
+      if (freeSubscription) {
+        await stripe.subscriptions.cancel(
+          freeSubscription?.data[0].subscription,
+        );
+      }
     }
   }
 
+  if (session.mode === "payment") {
+    const customerId = session.customer as string;
+    if (!customerId) {
+      throw new Error(ERRORS.STRIPE_SOMETHING_WENT_WRONG);
+    }
+
+    const retreivedSession = await stripe.checkout.sessions.retrieve(
+      session.id,
+      { expand: ["line_items"] },
+    );
+
+    const lineItems = retreivedSession.line_items;
+    if (lineItems && lineItems.data.length > 0) {
+      const priceId = lineItems.data[0]?.price?.id ?? undefined;
+
+      if (priceId) {
+        let creditsToAdd = 0;
+
+        if (priceId === STRIPE_SMALL_CREDIT_PACK) {
+          creditsToAdd = 50;
+        } else if (priceId === STRIPE_MEDIUM_CREDIT_PACK) {
+          creditsToAdd = 150;
+        } else if (priceId === STRIPE_LARGE_CREDIT_PACK) {
+          creditsToAdd = 500;
+        }
+
+        if (creditsToAdd > 0) {
+          await ctx.runMutation(internal.credits.addCredits, {
+            customerId,
+            credits: creditsToAdd,
+          });
+        }
+      }
+    }
+  }
   return new Response(null);
 };
 

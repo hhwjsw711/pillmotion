@@ -70,7 +70,7 @@ export const completeOnboarding = mutation({
     if (!user) {
       return;
     }
-    await ctx.db.patch(userId, { username: args.username });
+    await ctx.db.patch(userId, { username: args.username, credits: 10 });
     if (user.customerId) {
       return;
     }
