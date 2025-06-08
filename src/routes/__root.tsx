@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import React, { Suspense } from "react";
 import { Helmet } from "react-helmet-async";
+import { Toaster } from "@/ui/sonner";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -38,6 +39,7 @@ export const Route = createRootRouteWithContext<{
         <Suspense>
           <TanStackRouterDevtools />
         </Suspense>
+        <Toaster />
       </>
     );
   },

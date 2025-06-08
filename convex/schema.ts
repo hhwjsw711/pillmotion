@@ -91,6 +91,14 @@ const schema = defineSchema({
   })
     .index("userId", ["userId"])
     .index("stripeId", ["stripeId"]),
+  story: defineTable({
+    updatedAt: v.number(),
+    userId: v.id("users"),
+    title: v.string(),
+    script: v.string(),
+  })
+    .index("userId", ["userId"])
+    .searchIndex("search_story", { searchField: "script" }),
 });
 
 export default schema;

@@ -1,9 +1,13 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { List, Pencil, Wand2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/utils/misc.js";
 import { buttonVariants } from "@/ui/button-util";
 import siteConfig from "~/site.config";
+import { useNavigate } from "@tanstack/react-router";
+import { useConvexMutation } from "@convex-dev/react-query";
+import { api } from "~/convex/_generated/api";
+import { useState } from "react";
 
 export const Route = createFileRoute("/_app/_auth/dashboard/_layout/")({
   component: Dashboard,
@@ -16,20 +20,41 @@ export const Route = createFileRoute("/_app/_auth/dashboard/_layout/")({
 
 export default function Dashboard() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [isPending, setIsPending] = useState(false);
+  const createStory = useConvexMutation(api.story.createStory);
+
+  const handleCreateStory = async () => {
+    try {
+      setIsPending(true);
+      const storyId = await createStory({});
+
+      // 创建成功后导航到故事页面
+      navigate({
+        to: "/stories/$storyId",
+        params: { storyId },
+      });
+    } catch (error) {
+      console.error("Failed to create story:", error);
+      // 可以添加错误提示
+    } finally {
+      setIsPending(false);
+    }
+  };
 
   const apps = [
     {
-      to: "/generate/script",
+      onClick: handleCreateStory,
       icon: <Pencil className="h-8 w-8 stroke-[1.5px] text-primary/60" />,
       title: t("scriptTitle"),
     },
     {
-      to: "/generate/guided",
+      onClick: handleCreateStory,
       icon: <Wand2 className="h-8 w-8 stroke-[1.5px] text-primary/60" />,
       title: t("guidedTitle"),
     },
     {
-      to: "/generate/segment",
+      onClick: handleCreateStory,
       icon: <List className="h-8 w-8 stroke-[1.5px] text-primary/60" />,
       title: t("segmentTitle"),
     },
@@ -59,14 +84,15 @@ export default function Dashboard() {
                   key={idx}
                   className="z-10 flex max-w-[320px] flex-1 flex-col items-center gap-4"
                 >
-                  <Link
-                    to={app.to}
+                  <button
+                    onClick={app.onClick}
+                    disabled={isPending}
                     className={cn(
                       `${buttonVariants({ variant: "ghost", size: "sm" })} flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/20 bg-card hover:border-primary/40`,
                     )}
                   >
                     {app.icon}
-                  </Link>
+                  </button>
                   <div className="flex flex-col items-center gap-2">
                     <p className="text-base font-medium text-primary">
                       {app.title}
