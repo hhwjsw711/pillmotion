@@ -42,7 +42,7 @@ export function EditableTitle({ storyId, initialTitle }: EditableTitleProps) {
   };
 
   return (
-    <div className="mb-2 px-8">
+    <div className="mb-2 px-4 md:px-8">
       <Input
         ref={inputRef}
         defaultValue={initialTitle}

@@ -31,7 +31,7 @@ export default function Dashboard() {
 
       // 创建成功后导航到故事页面
       navigate({
-        to: "/stories/$storyId",
+        to: "/stories/$storyId/refine",
         params: { storyId },
       });
     } catch (error) {
@@ -42,6 +42,10 @@ export default function Dashboard() {
     }
   };
 
+  const handleNavigateToGenerate = () => {
+    navigate({ to: "/generate" });
+  };
+
   const apps = [
     {
       onClick: handleCreateStory,
@@ -49,7 +53,7 @@ export default function Dashboard() {
       title: t("scriptTitle"),
     },
     {
-      onClick: handleCreateStory,
+      onClick: handleNavigateToGenerate,
       icon: <Wand2 className="h-8 w-8 stroke-[1.5px] text-primary/60" />,
       title: t("guidedTitle"),
     },
