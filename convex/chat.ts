@@ -1,5 +1,5 @@
 import { httpAction } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { StreamId } from "@convex-dev/persistent-text-streaming";
 import { OpenAI } from "openai";
 import { streamingComponent } from "./streaming";
@@ -15,16 +15,33 @@ export const streamChat = httpAction(async (ctx, request) => {
 
   const userId = identity.subject.split("|")[0] as Id<"users">;
 
-  const body = (await request.json()) as {
-    streamId: string;
-  };
+  let streamId: StreamId;
+  try {
+    const body = (await request.json()) as { streamId: string };
+    streamId = body.streamId as StreamId;
+  } catch (error) {
+    // This can happen if the client polls the stream endpoint for a completed stream.
+    // We can just return an empty response, and the client will get the
+    // data from the query fallback.
+    return new Response(null, { status: 204 }); // No Content for malformed requests
+  }
+
+  // Check if the stream is already completed by calling our public query.
+  const streamBody = await ctx.runQuery(api.streaming.getStreamBody, {
+    streamId: streamId as string,
+  });
+  if (streamBody?.status === "done") {
+    // The stream is already complete, so there's nothing to do.
+    // We return a 205 to let the client know it should not retry.
+    return new Response(null, { status: 205 }); // Reset Content
+  }
 
   // Start streaming and persisting at the same time while
   // we immediately return a streaming response to the client
   const response = await streamingComponent.stream(
     ctx,
     request,
-    body.streamId as StreamId,
+    streamId,
     async (ctx, request, streamId, append) => {
       // Lets grab the history up to now so that the AI has some context
       const history = await ctx.runQuery(internal.messages.getHistory, {

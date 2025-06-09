@@ -24,7 +24,7 @@ export function ServerMessage({
     api.streaming.getStreamBody,
     new URL(`${getConvexSiteUrl()}/chat-stream`),
     isDriven,
-    isDriven && token ? (message.responseStreamId as StreamId) : undefined,
+    message.responseStreamId as StreamId,
     { authToken: token },
   );
 
