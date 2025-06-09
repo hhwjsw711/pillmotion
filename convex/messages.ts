@@ -1,19 +1,34 @@
 import { query, mutation, internalQuery } from "./_generated/server";
 import { StreamId } from "@convex-dev/persistent-text-streaming";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { streamingComponent } from "./streaming";
+import { auth } from "./auth";
 
 export const listMessages = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("userMessages").collect();
+    const userId = await auth.getUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+    return await ctx.db
+      .query("userMessages")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
   },
 });
 
 export const clearMessages = mutation({
   args: {},
   handler: async (ctx) => {
-    const chats = await ctx.db.query("userMessages").collect();
+    const userId = await auth.getUserId(ctx);
+    if (!userId) {
+      return;
+    }
+    const chats = await ctx.db
+      .query("userMessages")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
     await Promise.all(chats.map((chat) => ctx.db.delete(chat._id)));
   },
 });
@@ -23,8 +38,13 @@ export const sendMessage = mutation({
     prompt: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) {
+      throw new ConvexError("User must be authenticated to send a message.");
+    }
     const responseStreamId = await streamingComponent.createStream(ctx);
     const chatId = await ctx.db.insert("userMessages", {
+      userId,
       prompt: args.prompt,
       responseStreamId,
     });
@@ -33,10 +53,15 @@ export const sendMessage = mutation({
 });
 
 export const getHistory = internalQuery({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
     // Grab all the user messages
-    const allMessages = await ctx.db.query("userMessages").collect();
+    const allMessages = await ctx.db
+      .query("userMessages")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
 
     // Lets join the user messages with the assistant messages
     const joinedResponses = await Promise.all(

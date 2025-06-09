@@ -3,10 +3,18 @@ import { internal } from "./_generated/api";
 import { StreamId } from "@convex-dev/persistent-text-streaming";
 import { OpenAI } from "openai";
 import { streamingComponent } from "./streaming";
+import { Id } from "./_generated/dataModel";
 
 const openai = new OpenAI();
 
 export const streamChat = httpAction(async (ctx, request) => {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const userId = identity.subject.split("|")[0] as Id<"users">;
+
   const body = (await request.json()) as {
     streamId: string;
   };
@@ -19,7 +27,9 @@ export const streamChat = httpAction(async (ctx, request) => {
     body.streamId as StreamId,
     async (ctx, request, streamId, append) => {
       // Lets grab the history up to now so that the AI has some context
-      const history = await ctx.runQuery(internal.messages.getHistory);
+      const history = await ctx.runQuery(internal.messages.getHistory, {
+        userId,
+      });
 
       // Lets kickoff a stream request to OpenAI
       const stream = await openai.chat.completions.create({

@@ -101,9 +101,12 @@ const schema = defineSchema({
     .index("userId", ["userId"])
     .searchIndex("search_story", { searchField: "script" }),
   userMessages: defineTable({
+    userId: v.id("users"),
     prompt: v.string(),
     responseStreamId: StreamIdValidator,
-  }).index("by_stream", ["responseStreamId"]),
+  })
+    .index("by_user", ["userId"])
+    .index("by_stream", ["responseStreamId"]),
 });
 
 export default schema;

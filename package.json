@@ -15,8 +15,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@auth/core": "^0.34.1",
-    "@convex-dev/auth": "^0.0.43",
+    "@auth/core": "^0.37.0",
+    "@convex-dev/auth": "^0.0.87",
     "@convex-dev/persistent-text-streaming": "^0.2.3",
     "@convex-dev/prosemirror-sync": "^0.1.22",
     "@convex-dev/react-query": "^0.0.0-alpha.3",
