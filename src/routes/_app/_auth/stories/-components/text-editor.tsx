@@ -6,9 +6,7 @@ import { Id } from "~/convex/_generated/dataModel";
 
 export function TextEditor(props: { id: Id<"story"> }) {
   const sync = useTiptapSync(api.prosemirror, props.id, { debug: true });
-  if (!sync.isLoading && sync.initialContent === null) {
-    sync.create({ type: "doc", content: [] });
-  }
+
   return sync.initialContent !== null ? (
     <EditorProvider
       content={sync.initialContent}
@@ -16,7 +14,7 @@ export function TextEditor(props: { id: Id<"story"> }) {
       editorProps={{
         attributes: {
           class:
-            "prose prose-sm dark:prose-invert sm:prose-base focus:outline-none",
+            "prose prose-lg dark:prose-invert focus:outline-none max-w-none",
         },
       }}
     >

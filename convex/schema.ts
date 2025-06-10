@@ -33,6 +33,27 @@ export const planKeyValidator = v.union(
 );
 export type PlanKey = Infer<typeof planKeyValidator>;
 
+export const storyStatusValidator = v.union(
+  v.literal("draft"),
+  v.literal("unpublished"),
+  v.literal("published"),
+);
+export type StoryStatus = Infer<typeof storyStatusValidator>;
+
+export const storyGenerationStatusValidator = v.union(
+  v.literal("idle"),
+  v.literal("processing"),
+  v.literal("completed"),
+  v.literal("error"),
+);
+export type StoryGenerationStatus = Infer<typeof storyGenerationStatusValidator>;
+
+export const storyFormatValidator = v.union(
+  v.literal("vertical"),
+  v.literal("horizontal"),
+);
+export type StoryFormat = Infer<typeof storyFormatValidator>;
+
 export const priceIdValidator = v.union(
   v.literal("small"),
   v.literal("medium"),
@@ -97,8 +118,12 @@ const schema = defineSchema({
     userId: v.id("users"),
     title: v.string(),
     script: v.string(),
+    status: v.optional(storyStatusValidator),
+    generationStatus: v.optional(storyGenerationStatusValidator),
+    format: v.optional(storyFormatValidator),
   })
     .index("userId", ["userId"])
+    .index("by_user_status", ["userId", "status"])
     .searchIndex("search_story", { searchField: "script" }),
   userMessages: defineTable({
     userId: v.id("users"),

@@ -5,9 +5,10 @@ import { cn } from "@/utils/misc.js";
 import { buttonVariants } from "@/ui/button-util";
 import siteConfig from "~/site.config";
 import { useNavigate } from "@tanstack/react-router";
+import { useMutation } from "@tanstack/react-query";
 import { useConvexMutation } from "@convex-dev/react-query";
 import { api } from "~/convex/_generated/api";
-import { useState } from "react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/_auth/dashboard/_layout/")({
   component: Dashboard,
@@ -21,24 +22,37 @@ export const Route = createFileRoute("/_app/_auth/dashboard/_layout/")({
 export default function Dashboard() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [isPending, setIsPending] = useState(false);
-  const createStory = useConvexMutation(api.story.createStory);
+  const { mutateAsync: createStory, isPending: isCreating } = useMutation({
+    mutationFn: useConvexMutation(api.story.createStory),
+  });
+  const { mutateAsync: initializeEditor, isPending: isInitializing } =
+    useMutation({
+      mutationFn: useConvexMutation(api.story.initializeEditor),
+    });
 
+  const isPending = isCreating || isInitializing;
+
+  // 3. 修改 handleCreateStory 来执行两步创建流程
   const handleCreateStory = async () => {
+    const toastId = toast.loading("Creating a new story...");
     try {
-      setIsPending(true);
+      // 第 1 步: 创建故事
       const storyId = await createStory({});
 
-      // 创建成功后导航到故事页面
+      // 第 2 步: 初始化编辑器
+      toast.loading("Initializing editor...", { id: toastId });
+      await initializeEditor({ storyId });
+
+      toast.success("Story created successfully!", { id: toastId });
+
+      // 第 3 步: 跳转页面
       navigate({
         to: "/stories/$storyId/refine",
         params: { storyId },
       });
     } catch (error) {
+      toast.error("Failed to create story.", { id: toastId });
       console.error("Failed to create story:", error);
-      // 可以添加错误提示
-    } finally {
-      setIsPending(false);
     }
   };
 
