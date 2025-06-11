@@ -2,7 +2,7 @@ import { useCopyToClipboard } from "usehooks-ts";
 import { useMutation } from "@tanstack/react-query";
 import { useConvexMutation } from "@convex-dev/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Copy, BookUp } from "lucide-react";
+import { Copy, Pencil } from "lucide-react";
 import { Button } from "@/ui/button";
 import {
   Tooltip,
@@ -96,7 +96,7 @@ export function PureMessageActions({ text, isLoading }: MessageActionsProps) {
                 }
               }}
             >
-              <BookUp className="h-4 w-4" />
+              <Pencil className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Create Story</TooltipContent>

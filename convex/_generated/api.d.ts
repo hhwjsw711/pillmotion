@@ -21,6 +21,8 @@ import type * as messages from "../messages.js";
 import type * as otp_ResendOTP from "../otp/ResendOTP.js";
 import type * as otp_VerificationCodeEmail from "../otp/VerificationCodeEmail.js";
 import type * as prosemirror from "../prosemirror.js";
+import type * as replicate from "../replicate.js";
+import type * as segments from "../segments.js";
 import type * as story from "../story.js";
 import type * as streaming from "../streaming.js";
 import type * as stripe from "../stripe.js";
@@ -53,6 +55,8 @@ declare const fullApi: ApiFromModules<{
   "otp/ResendOTP": typeof otp_ResendOTP;
   "otp/VerificationCodeEmail": typeof otp_VerificationCodeEmail;
   prosemirror: typeof prosemirror;
+  replicate: typeof replicate;
+  segments: typeof segments;
   story: typeof story;
   streaming: typeof streaming;
   stripe: typeof stripe;

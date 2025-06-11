@@ -1,8 +1,44 @@
-import { mutation, query } from "./_generated/server";
+import {
+  mutation,
+  query,
+  internalAction,
+  internalMutation,
+  MutationCtx,
+  QueryCtx,
+  internalQuery,
+} from "./_generated/server";
 import { prosemirrorSync } from "./prosemirror";
 import { auth } from "./auth";
-import { v } from "convex/values";
-import { storyFormatValidator, storyStatusValidator } from "./schema";
+import { ConvexError, v } from "convex/values";
+import {
+  storyFormatValidator,
+  storyStatusValidator,
+  CREDIT_COSTS,
+} from "./schema";
+import { internal } from "./_generated/api";
+import { consumeCreditsHelper } from "./credits";
+import OpenAI from "openai";
+import { Id } from "./_generated/dataModel";
+
+const openai = new OpenAI();
+
+async function verifyStoryOwnerHelper(
+  ctx: MutationCtx | QueryCtx,
+  storyId: Id<"story">,
+) {
+  const userId = await auth.getUserId(ctx);
+  if (!userId) {
+    throw new ConvexError("User not authenticated.");
+  }
+  const story = await ctx.db.get(storyId);
+  if (!story) {
+    throw new ConvexError("Story not found.");
+  }
+  if (story.userId !== userId) {
+    throw new ConvexError("User is not the owner of this story.");
+  }
+  return { story, userId };
+}
 
 export const list = query({
   args: {
@@ -54,13 +90,9 @@ export const createStory = mutation({
 export const initializeEditor = mutation({
   args: { storyId: v.id("story") },
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx);
-    if (!userId) throw new Error("User must be authenticated.");
-
+    await verifyStoryOwnerHelper(ctx, args.storyId);
     const story = await ctx.db.get(args.storyId);
-    if (!story || story.userId !== userId) {
-      throw new Error("Story not found or user not authorized.");
-    }
+    if (!story) throw new Error("Story not found");
 
     const scriptText = story.script || "";
     const paragraphs = scriptText
@@ -87,14 +119,7 @@ export const updateStoryFormat = mutation({
     format: storyFormatValidator,
   },
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx);
-    if (!userId) throw new Error("Unauthorized operation.");
-
-    const story = await ctx.db.get(args.storyId);
-    if (!story || story.userId !== userId) {
-      throw new Error("Story not found or user not authorized.");
-    }
-
+    await verifyStoryOwnerHelper(ctx, args.storyId);
     await ctx.db.patch(args.storyId, { format: args.format });
   },
 });
@@ -102,20 +127,7 @@ export const updateStoryFormat = mutation({
 export const getStory = query({
   args: { storyId: v.id("story") },
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx);
-    if (!userId) {
-      throw new Error("Unauthorized operation");
-    }
-
-    const story = await ctx.db.get(args.storyId);
-    if (!story) {
-      throw new Error("Story not found");
-    }
-
-    if (story.userId !== userId) {
-      throw new Error("Unauthorized access");
-    }
-
+    const { story } = await verifyStoryOwnerHelper(ctx, args.storyId);
     return story;
   },
 });
@@ -126,20 +138,7 @@ export const updateStoryTitle = mutation({
     title: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx);
-    if (!userId) {
-      throw new Error("Unauthorized operation");
-    }
-
-    const story = await ctx.db.get(args.storyId);
-    if (!story) {
-      throw new Error("Story not found");
-    }
-
-    if (story.userId !== userId) {
-      throw new Error("Unauthorized access");
-    }
-
+    await verifyStoryOwnerHelper(ctx, args.storyId);
     await ctx.db.patch(args.storyId, {
       title: args.title,
       updatedAt: Date.now(),
@@ -150,20 +149,97 @@ export const updateStoryTitle = mutation({
 export const deleteStory = mutation({
   args: { storyId: v.id("story") },
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx);
-    if (!userId) {
-      throw new Error("Unauthorized operation");
-    }
-
-    const story = await ctx.db.get(args.storyId);
-    if (!story) {
-      throw new Error("Story not found");
-    }
-
-    if (story.userId !== userId) {
-      throw new Error("Unauthorized access");
-    }
-
+    await verifyStoryOwnerHelper(ctx, args.storyId);
     await ctx.db.delete(args.storyId);
+  },
+});
+
+export const generateSegments = mutation({
+  args: {
+    storyId: v.id("story"),
+    format: storyFormatValidator,
+  },
+  handler: async (ctx, args) => {
+    const { storyId, format } = args;
+
+    const { story, userId } = await verifyStoryOwnerHelper(ctx, storyId);
+
+    await ctx.db.patch(storyId, { format });
+
+    await consumeCreditsHelper(ctx, userId, CREDIT_COSTS.CHAT_COMPLETION);
+
+    await ctx.scheduler.runAfter(0, internal.story.generateSegmentsAction, {
+      storyId,
+      script: story.script,
+      userId: userId,
+    });
+  },
+});
+
+export const generateSegmentsAction = internalAction({
+  args: {
+    storyId: v.id("story"),
+    script: v.string(),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const context = await generateContext(args.script);
+    if (!context) throw new Error("Failed to generate context");
+
+    const segments = args.script.split(/\n{2,}/).filter((s) => s.trim() !== "");
+
+    await ctx.runMutation(internal.story.updateStoryContext, {
+      storyId: args.storyId,
+      context,
+    });
+
+    for (let i = 0; i < segments.length; i++) {
+      await ctx.runMutation(internal.segments.createSegmentWithImageInternal, {
+        storyId: args.storyId,
+        text: segments[i],
+        order: i,
+        context: context,
+        userId: args.userId,
+      });
+    }
+  },
+});
+
+export const updateStoryContext = internalMutation({
+  args: {
+    storyId: v.id("story"),
+    context: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.storyId, { context: args.context });
+  },
+});
+
+async function generateContext(script: string) {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content:
+          'You are a top-tier art director for a film studio. Your task is to read the provided script and generate a "Style Bible" in a JSON format. This bible will guide all visual production. Do not output anything besides the JSON object. The JSON object must contain these keys: "visual_theme", "mood", "color_palette", "lighting_style", "character_design", "environment_design".',
+      },
+      {
+        role: "user",
+        content: script,
+      },
+    ],
+    max_tokens: 400,
+    response_format: { type: "json_object" },
+  });
+  const context = completion.choices[0].message.content;
+  if (!context) throw new Error("Failed to generate context from OpenAI.");
+  return context;
+}
+
+export const getStoryInternal = internalQuery({
+  args: { storyId: v.id("story") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.storyId);
   },
 });

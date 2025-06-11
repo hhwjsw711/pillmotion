@@ -3,6 +3,18 @@ import { authTables } from "@convex-dev/auth/server";
 import { StreamIdValidator } from "@convex-dev/persistent-text-streaming";
 import { v, Infer } from "convex/values";
 
+export const CREDIT_COSTS = {
+  CHAT_COMPLETION: 1,
+  IMAGE_GENERATION: 10,
+  VIDEO_GENERATION: 100,
+} as const;
+export const creditCostValidator = v.union(
+  v.literal(CREDIT_COSTS.CHAT_COMPLETION),
+  v.literal(CREDIT_COSTS.IMAGE_GENERATION),
+  v.literal(CREDIT_COSTS.VIDEO_GENERATION),
+);
+export type CreditCost = Infer<typeof creditCostValidator>;
+
 export const CURRENCIES = {
   USD: "usd",
   EUR: "eur",
@@ -46,7 +58,9 @@ export const storyGenerationStatusValidator = v.union(
   v.literal("completed"),
   v.literal("error"),
 );
-export type StoryGenerationStatus = Infer<typeof storyGenerationStatusValidator>;
+export type StoryGenerationStatus = Infer<
+  typeof storyGenerationStatusValidator
+>;
 
 export const storyFormatValidator = v.union(
   v.literal("vertical"),
@@ -121,10 +135,23 @@ const schema = defineSchema({
     status: v.optional(storyStatusValidator),
     generationStatus: v.optional(storyGenerationStatusValidator),
     format: v.optional(storyFormatValidator),
+    context: v.optional(v.string()),
   })
     .index("userId", ["userId"])
     .index("by_user_status", ["userId", "status"])
     .searchIndex("search_story", { searchField: "script" }),
+  segments: defineTable({
+    storyId: v.id("story"),
+    text: v.string(),
+    order: v.number(),
+    isGenerating: v.boolean(),
+    image: v.optional(v.id("_storage")),
+    previewImage: v.optional(v.id("_storage")),
+    prompt: v.optional(v.string()),
+    error: v.optional(v.string()),
+  })
+    .index("by_story", ["storyId"])
+    .index("by_story_order", ["storyId", "order"]),
   userMessages: defineTable({
     userId: v.id("users"),
     prompt: v.string(),

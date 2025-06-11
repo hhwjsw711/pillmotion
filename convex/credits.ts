@@ -1,6 +1,8 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import { ERRORS } from "~/errors";
+import { MutationCtx } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
 
 export const addCredits = internalMutation({
   args: {
@@ -22,3 +24,22 @@ export const addCredits = internalMutation({
     });
   },
 });
+
+export async function consumeCreditsHelper(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  amountToUse: number,
+) {
+  const user = await ctx.db.get(userId);
+  if (!user) {
+      throw new ConvexError(`User not found with ID: ${userId}`);
+  }
+
+  if ((user.credits ?? 0) < amountToUse) {
+      throw new ConvexError(`Insufficient credits for user ${userId}. Required: ${amountToUse}, Available: ${user.credits ?? 0}`);
+  }
+
+  await ctx.db.patch(userId, {
+      credits: (user.credits ?? 0) - amountToUse,
+  });
+}

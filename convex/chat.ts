@@ -50,14 +50,15 @@ export const streamChat = httpAction(async (ctx, request) => {
 
       // Lets kickoff a stream request to OpenAI
       const stream = await openai.chat.completions.create({
-        model: "gpt-4.1-mini",
+        model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: `You are a professional writer tasked with creating a short story for a voice over based on a given description. The story should be a story that is 10,000 characters max length. DO NOT TITLE ANY SEGMENT. JUST RETURN THE TEXT OF THE ENTIRE STORY. THIS IS FOR A VOICE OVER, ONLY INCLUDE THE SPOKEN WORDS.
-          Please provide your response in markdown format.
-          
-          You are continuing a conversation. The conversation so far is found in the following JSON-formatted value:`,
+            content: `You are a professional scriptwriter tasked with creating a story for a voice-over.
+- Your output must be plain text, suitable for a text-to-speech engine.
+- Only include the spoken words. Do not add any titles, headings, scene descriptions, or character names like "Narrator:".
+- The total length should not exceed 10,000 characters.
+- You are continuing a conversation. Use the provided history to understand the user's intent and continue the story logically.`,
           },
           ...history,
         ],
