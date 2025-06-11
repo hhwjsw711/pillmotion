@@ -14,11 +14,13 @@ import {
   storyFormatValidator,
   storyStatusValidator,
   CREDIT_COSTS,
+  storyGenerationStatusValidator,
 } from "./schema";
 import { internal } from "./_generated/api";
 import { consumeCreditsHelper } from "./credits";
 import OpenAI from "openai";
 import { Id } from "./_generated/dataModel";
+import { nanoid } from "nanoid";
 
 const openai = new OpenAI();
 
@@ -161,47 +163,160 @@ export const generateSegments = mutation({
   },
   handler: async (ctx, args) => {
     const { storyId, format } = args;
+    const { userId } = await verifyStoryOwnerHelper(ctx, storyId);
 
-    const { story, userId } = await verifyStoryOwnerHelper(ctx, storyId);
+    const generationId = nanoid();
 
-    await ctx.db.patch(storyId, { format });
-
+    await ctx.db.patch(storyId, {
+      format,
+      generationStatus: "processing",
+      generationId: generationId,
+    });
     await consumeCreditsHelper(ctx, userId, CREDIT_COSTS.CHAT_COMPLETION);
 
-    await ctx.scheduler.runAfter(0, internal.story.generateSegmentsAction, {
+    await ctx.scheduler.runAfter(0, internal.story.generateStoryOrchestrator, {
       storyId,
-      script: story.script,
       userId: userId,
+      generationId: generationId,
     });
   },
 });
 
-export const generateSegmentsAction = internalAction({
+async function splitScriptIntoScenes(script: string): Promise<string[]> {
+  try {
+    const completion = await openai.chat.completions.create({
+      // You can use "gpt-4o" for potentially higher accuracy, or "gpt-4o-mini" for a balance of speed and cost.
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are an expert film editor and script supervisor. Your task is to read a story script and break it down into a sequence of distinct scenes or 'shots'.
+
+A scene change typically occurs when:
+- The location changes (e.g., from the castle to the forest).
+- The time of day changes.
+- A new key character enters or exits.
+- A significant, distinct action takes place (e.g., the Queen talks to the mirror, the huntsman releases Snow White, Snow White bites the apple).
+
+Each resulting scene should be a self-contained, visually coherent moment that can be reasonably illustrated by a single image. Preserve the original wording and language of the text.
+
+Output the result as a single JSON object with a single key "scenes", which contains an array of strings. Do not output anything else.
+
+Example Input:
+"A princess lived in a castle. One day, she ran into the dark forest. There, she found a small cottage."
+
+Example Output:
+{
+  "scenes": [
+    "A princess lived in a castle.",
+    "One day, she ran into the dark forest.",
+    "There, she found a small cottage."
+  ]
+}`,
+        },
+        { role: "user", content: script },
+      ],
+      // This is crucial for ensuring the AI returns valid JSON.
+      response_format: { type: "json_object" },
+    });
+
+    const content = completion.choices[0].message.content;
+
+    // Handle cases where the AI might not respond.
+    if (!content) {
+      console.error("AI did not return content for script splitting.");
+      return [script]; // Fallback to the original script
+    }
+
+    // Parse the JSON response from the AI.
+    const result = JSON.parse(content);
+
+    // Check if the parsed object has the 'scenes' key and it's an array.
+    if (result.scenes && Array.isArray(result.scenes)) {
+      // Filter out any empty strings that might have been generated.
+      return result.scenes.filter(
+        (scene: unknown) => typeof scene === "string" && scene.trim() !== "",
+      );
+    }
+
+    console.error("AI response did not match the expected format:", result);
+    return [script]; // Fallback if the format is incorrect.
+  } catch (error) {
+    console.error("Failed to split script using AI:", error);
+    // If any error occurs (network, parsing, etc.), we fall back to the safest option.
+    return [script];
+  }
+}
+
+export const generateStoryOrchestrator = internalAction({
   args: {
     storyId: v.id("story"),
-    script: v.string(),
     userId: v.id("users"),
+    generationId: v.string(),
   },
   handler: async (ctx, args) => {
-    const context = await generateContext(args.script);
-    if (!context) throw new Error("Failed to generate context");
+    const { storyId, userId, generationId } = args;
+    const story = await ctx.runQuery(internal.story.getStoryInternal, {
+      storyId,
+    });
+    if (!story) throw new Error("Story not found");
 
-    const segments = args.script.split(/\n{2,}/).filter((s) => s.trim() !== "");
+    let segments: string[];
+    // If the script from the DB contains our special separator, it means the user has made paragraphs.
+    if (story.script.includes("\n\n")) {
+      // We use the structure the user provided.
+      segments = story.script.split(/\n{2,}/).filter((s) => s.trim() !== "");
+    } else {
+      // Otherwise, the user provided a single block of text. Time for the AI Editor.
+      segments = await splitScriptIntoScenes(story.script);
+    }
 
+    if (segments.length === 0) {
+      await ctx.runMutation(internal.story.updateStoryGenerationStatus, {
+        storyId,
+        status: "completed",
+      });
+      return;
+    }
+
+    const context = await generateContext(story.script);
     await ctx.runMutation(internal.story.updateStoryContext, {
-      storyId: args.storyId,
+      storyId,
       context,
     });
 
-    for (let i = 0; i < segments.length; i++) {
-      await ctx.runMutation(internal.segments.createSegmentWithImageInternal, {
-        storyId: args.storyId,
-        text: segments[i],
-        order: i,
-        context: context,
-        userId: args.userId,
-      });
+    const segmentGenerationPromises = segments.map((text, order) =>
+      ctx.runAction(internal.segments.generateAndCreateSegment, {
+        storyId,
+        text,
+        order,
+        context,
+        userId,
+      }),
+    );
+
+    const results = await Promise.all(segmentGenerationPromises);
+
+    const currentStory = await ctx.runQuery(internal.story.getStoryInternal, {
+      storyId,
+    });
+
+    if (currentStory?.generationId !== generationId) {
+      // A new generation task has been started. This task is now obsolete.
+      // We should silently exit and not update the status.
+      console.log(
+        `Orchestrator (genId: ${generationId}) is obsolete. Current is ${currentStory?.generationId}. Aborting final status update.`,
+      );
+      return;
     }
+
+    const hasErrors = results.some((r) => !r.success);
+    const finalStatus = hasErrors ? "error" : "completed";
+
+    await ctx.runMutation(internal.story.updateStoryGenerationStatus, {
+      storyId,
+      status: finalStatus,
+    });
   },
 });
 
@@ -215,21 +330,38 @@ export const updateStoryContext = internalMutation({
   },
 });
 
+export const updateStoryGenerationStatus = internalMutation({
+  args: {
+    storyId: v.id("story"),
+    status: storyGenerationStatusValidator,
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.storyId, { generationStatus: args.status });
+  },
+});
+
 async function generateContext(script: string) {
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
       {
         role: "system",
-        content:
-          'You are a top-tier art director for a film studio. Your task is to read the provided script and generate a "Style Bible" in a JSON format. This bible will guide all visual production. Do not output anything besides the JSON object. The JSON object must contain these keys: "visual_theme", "mood", "color_palette", "lighting_style", "character_design", "environment_design".',
+        content: `You are a top-tier showrunner for a film studio. Your task is to analyze the provided script and generate a comprehensive "Production Bible" in a single JSON object. This bible will guide all visual and narrative production.
+
+The JSON object MUST contain exactly two top-level keys:
+1.  "story_outline": A concise, one-paragraph summary of the entire plot, including the beginning, key turning points, and the ending.
+2.  "style_bible": An object containing the visual style guide, which must include these keys: "visual_theme", "mood", "color_palette", "lighting_style", "character_design", "environment_design".
+
+**IMPORTANT**: First, detect the primary language of the input script. The entire "story_outline" and all values within the "style_bible" MUST be written in this detected language. This ensures consistency for our international teams.
+
+Do not output anything besides this single, complete JSON object. If the script is too short, nonsensical, or you cannot perform the task, return a JSON object with a single key "error" containing a brief explanation.`,
       },
       {
         role: "user",
         content: script,
       },
     ],
-    max_tokens: 400,
+    max_tokens: 800,
     response_format: { type: "json_object" },
   });
   const context = completion.choices[0].message.content;

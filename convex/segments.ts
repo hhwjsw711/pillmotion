@@ -4,91 +4,123 @@ import {
   internalQuery,
 } from "./_generated/server";
 import { v } from "convex/values";
-import { consumeCreditsHelper } from "./credits";
 import { internal } from "./_generated/api";
-import { z } from "zod";
-import { zodResponseFormat } from "openai/helpers/zod";
 import { CREDIT_COSTS } from "./schema";
 import OpenAI from "openai";
+import { Id } from "./_generated/dataModel";
 
 const openai = new OpenAI();
 
 function getSystemPrompt(context?: string) {
-  return `You are an expert prompt engineer for text-to-image models like Midjourney or Stable Diffusion.
-        CONTEXT: The overall visual style for the story is: ${context || "A vibrant, cinematic anime style."}
-        Your job is to take the user's input, which is a segment of a story, and expand it into a detailed, descriptive prompt.
-        The prompt must be a single, fluid paragraph. Focus on specifying character actions, emotions, the environment, lighting, and camera details.
-        **Crucially, include photographic terms like camera angle (e.g., low-angle shot, aerial view), lens type (e.g., wide-angle, macro), and specific lighting descriptions (e.g., volumetric lighting, rim lighting).**
-        Do not output anything other than the JSON object with the "prompt" key.`;
+  let styleInstructions = "A vibrant, cinematic anime style.";
+  if (context) {
+    try {
+      const parsedContext = JSON.parse(context);
+      const sb = parsedContext.style_bible;
+      if (sb) {
+        styleInstructions = `${sb.visual_theme}, in a ${sb.mood} mood. The color palette is dominated by ${sb.color_palette}, with ${sb.lighting_style}. Characters should look like ${sb.character_design}, and environments like ${sb.environment_design}.`;
+      }
+    } catch (e) {
+      console.warn(
+        "Failed to parse context for style instructions. Using default style.",
+        e,
+      );
+    }
+  }
+
+  return `You are an expert prompt engineer for text-to-image models...
+        Your job is to take a segment of a story and expand it into a detailed, descriptive prompt.
+        
+        **STYLE CONTEXT**: The overall visual style is strictly defined as: "${styleInstructions}"
+        You must adhere to this style.
+
+        **SCENE DESCRIPTION**: The specific scene to illustrate is:
+        
+        Your task is to merge the STYLE CONTEXT with the SCENE DESCRIPTION into a single, fluid paragraph. Focus on character actions, emotions, and environment.
+        
+        **TECHNICAL REQUIREMENTS**:
+        - Include photographic terms: camera angle (e.g., low-angle shot), lens type (e.g., wide-angle), lighting (e.g., volumetric lighting).
+        - **Avoid clichés**: Do not use generic or lazy phrases.
+        - **Negative Prompt Hints**: Implicitly avoid ugly, deformed, blurry, or low-quality results. Ensure anatomical correctness.
+        
+        Output ONLY a JSON object with the key "prompt".`;
 }
 
-export const createSegmentWithImageInternal = internalMutation({
+export const generateAndCreateSegment = internalAction({
   args: {
     userId: v.id("users"),
     storyId: v.id("story"),
     text: v.string(),
     order: v.number(),
-    context: v.string(),
+    context: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; error?: string }> => {
+    let segmentId: Id<"segments"> | null = null;
+    try {
+      // Create the segment entry first to make it visible in the UI
+      segmentId = await ctx.runMutation(internal.segments.createSegment, {
+        storyId: args.storyId,
+        text: args.text,
+        order: args.order,
+      });
+
+      await ctx.runMutation(internal.credits.consumeCredits, {
+        userId: args.userId,
+        cost: CREDIT_COSTS.IMAGE_GENERATION,
+      });
+
+      // Generate the prompt
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: getSystemPrompt(args.context) },
+          { role: "user", content: args.text },
+        ],
+        response_format: { type: "json_object" },
+      });
+      const content = completion.choices[0].message.content;
+      if (!content) {
+        throw new Error("OpenAI did not return content for prompt generation.");
+      }
+      const prompt = JSON.parse(content).prompt;
+
+      // Generate the image and update the segment
+      await ctx.runAction(
+        internal.replicate.regenerateSegmentImageUsingPrompt,
+        {
+          segmentId,
+          prompt,
+        },
+      );
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("Failed to generate segment:", error);
+      if (segmentId) {
+        await ctx.runMutation(internal.segments.updateSegment, {
+          segmentId,
+          isGenerating: false,
+          error: error.message || "Unknown error",
+        });
+      }
+      return { success: false, error: error.message };
+    }
+  },
+});
+
+export const createSegment = internalMutation({
+  args: {
+    storyId: v.id("story"),
+    text: v.string(),
+    order: v.number(),
   },
   async handler(ctx, args) {
-    const segmentId = await ctx.db.insert("segments", {
+    return await ctx.db.insert("segments", {
       storyId: args.storyId,
       text: args.text,
       order: args.order,
       isGenerating: true,
     });
-
-    await consumeCreditsHelper(ctx, args.userId, CREDIT_COSTS.IMAGE_GENERATION);
-
-    await ctx.scheduler.runAfter(
-      0,
-      internal.segments.generateSegmentImageReplicateInternal,
-      {
-        segment: {
-          text: args.text,
-          _id: segmentId,
-        },
-        context: args.context,
-      },
-    );
-  },
-});
-
-export const generateSegmentImageReplicateInternal = internalAction({
-  args: {
-    context: v.optional(v.string()),
-    segment: v.object({
-      text: v.string(),
-      _id: v.id("segments"),
-    }),
-  },
-  async handler(ctx, args) {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: getSystemPrompt(args.context),
-        },
-        { role: "user", content: args.segment.text },
-      ],
-      response_format: zodResponseFormat(
-        z.object({
-          prompt: z.string(),
-        }),
-        "prompt",
-      ),
-    });
-
-    const prompt = JSON.parse(
-      completion.choices[0].message.content as string,
-    ).prompt;
-
-    await ctx.scheduler.runAfter(
-      0,
-      internal.replicate.regenerateSegmentImageUsingPrompt,
-      { segmentId: args.segment._id, prompt },
-    );
   },
 });
 

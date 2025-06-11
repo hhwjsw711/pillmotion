@@ -136,6 +136,7 @@ const schema = defineSchema({
     generationStatus: v.optional(storyGenerationStatusValidator),
     format: v.optional(storyFormatValidator),
     context: v.optional(v.string()),
+    generationId: v.optional(v.string()),
   })
     .index("userId", ["userId"])
     .index("by_user_status", ["userId", "status"])

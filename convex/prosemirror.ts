@@ -6,8 +6,6 @@ import { getSchema } from "@tiptap/core";
 import { Transform, Step } from "@tiptap/pm/transform";
 import { EditorState } from "@tiptap/pm/state";
 import { extensions } from "~/src/utils/extensions";
-import { Schema } from "@tiptap/pm/model";
-import { BlockNoteEditor } from "@blocknote/core";
 import { Id } from "./_generated/dataModel";
 
 export const prosemirrorSync = new ProsemirrorSync<Id<"story">>(
@@ -33,18 +31,26 @@ export const {
     // save a text version of the document for text search, or generate
     // embeddings for vector search.
     const snapshotJSON = JSON.parse(snapshot);
-    let schema: Schema;
-    // A hack for our demo which uses both BlockNote and Tiptap.
-    if (id.endsWith("-blocknote")) {
-      // Parse the snapshot from BlockNote.
-      const editor = BlockNoteEditor.create({ _headless: true });
-      schema = editor.pmSchema;
-    } else {
-      // Fetching the content from Tiptap, using your extensions.
-      schema = getSchema(extensions);
-    }
+    if (!snapshotJSON.content) return;
+
+    // --- START: ELEGANT SCRIPT EXTRACTION ---
+    const schema = getSchema(extensions);
     const node = schema.nodeFromJSON(snapshotJSON);
-    const script = node.textContent;
+
+    // Instead of node.textContent, we iterate through each paragraph.
+    const paragraphs: string[] = [];
+    node.forEach(paragraphNode => {
+      // We only care about nodes that are paragraphs and are not empty.
+      if (paragraphNode.type.name === 'paragraph' && paragraphNode.textContent.trim() !== '') {
+        paragraphs.push(paragraphNode.textContent);
+      }
+    });
+
+    // We reconstruct the script, preserving the paragraph structure with double newlines.
+    // This makes it compatible with our backend logic!
+    const script = paragraphs.join('\n\n');
+    // --- END: ELEGANT SCRIPT EXTRACTION ---
+
     await ctx.scheduler.runAfter(0, internal.prosemirror.updateDocSearchIndex, {
       id,
       script,
