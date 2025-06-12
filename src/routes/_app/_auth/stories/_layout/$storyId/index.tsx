@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { SegmentCard } from "./-components/segment-card";
+import { SegmentCard } from "../../-components/segment-card";
 import { useQuery } from "convex/react";
 import { api } from "~/convex/_generated/api";
 import { Doc, Id } from "~/convex/_generated/dataModel";
@@ -124,7 +124,7 @@ function StorySegments({ story }: { story: Doc<"story"> }) {
   return (
     <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
       {segments.map((segment) => (
-        <SegmentCard key={segment._id} segmentId={segment._id} />
+        <SegmentCard key={segment._id} segment={segment} />
       ))}
     </div>
   );

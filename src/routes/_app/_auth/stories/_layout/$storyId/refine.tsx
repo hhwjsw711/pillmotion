@@ -1,11 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { TextEditor } from "./-components/text-editor";
+import { TextEditor } from "../../-components/text-editor";
 import { Id } from "~/convex/_generated/dataModel";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { convexQuery, useConvexMutation } from "@convex-dev/react-query";
 import { api } from "~/convex/_generated/api";
 import { cn } from "@/utils/misc";
-import { EditableTitle } from "./-components/editable-title";
+import { EditableTitle } from "../../-components/editable-title";
 import { Button } from "@/ui/button";
 import {
   Dialog,

@@ -1,4 +1,4 @@
-"use node"
+"use node";
 
 import Replicate from "replicate";
 import { internalAction } from "./_generated/server";
@@ -27,11 +27,6 @@ export const regenerateSegmentImageUsingPrompt = internalAction({
         storyId: segment.storyId,
       });
       if (!story) throw new Error("Story not found");
-
-      await ctx.runMutation(internal.segments.updateSegment, {
-        segmentId: args.segmentId,
-        isGenerating: true,
-      });
 
       const isVertical = story.format === "vertical";
       const width = isVertical ? 1080 : 1920;
@@ -72,9 +67,8 @@ export const regenerateSegmentImageUsingPrompt = internalAction({
       const url = output[0];
       const response = await fetch(url);
       const arrayBuffer = await response.arrayBuffer();
-      const buf = Buffer.from(arrayBuffer);
 
-      const image = await Jimp.read(buf);
+      const image = await Jimp.read(arrayBuffer);
 
       const originalImageBuffer = await image.getBuffer("image/jpeg");
       const storageId: Id<"_storage"> = await ctx.storage.store(
@@ -91,18 +85,18 @@ export const regenerateSegmentImageUsingPrompt = internalAction({
         new Blob([previewImageBuffer], { type: "image/jpeg" }),
       );
 
-      await ctx.runMutation(internal.segments.updateSegment, {
+      await ctx.runMutation(internal.imageVersions.createAndSelectVersion, {
         segmentId: args.segmentId,
+        userId: story.userId,
+        prompt: args.prompt,
         image: storageId,
         previewImage: previewStorageId,
-        prompt: args.prompt,
-        isGenerating: false,
-        error: "",
+        source: "ai_generated",
       });
     } catch (err) {
       const error = err as Error;
       console.error(error.message);
-      await ctx.runMutation(internal.segments.updateSegment, {
+      await ctx.runMutation(internal.segments.updateSegmentStatus, {
         segmentId: args.segmentId,
         isGenerating: false,
         error: error.message,

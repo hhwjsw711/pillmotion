@@ -59,7 +59,7 @@ export function Navigation({ user }: { user: User }) {
               asChild
               className="h-8 text-xs font-medium"
             >
-              <Link href="/dashboard/billing">Buy more</Link>
+              <Link to="/dashboard/billing">Buy more</Link>
             </Button>
           </div>
           <DropdownMenu modal={false}>

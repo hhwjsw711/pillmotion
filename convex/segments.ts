@@ -11,13 +11,12 @@ import { CREDIT_COSTS } from "./schema";
 import OpenAI from "openai";
 import { Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { consumeCreditsHelper } from "./credits";
 
 const openai = new OpenAI();
 
 function getSystemPrompt(context?: string) {
-  // The base style instructions, if context is missing.
   const defaultStyle = "A vibrant, cinematic anime style.";
-  // We will pass the raw context JSON directly to the model.
   const contextString =
     context || `{"style_bible": {"visual_theme": "${defaultStyle}"}}`;
 
@@ -69,6 +68,43 @@ export const updateSegmentText = mutation({
   },
 });
 
+export const regenerateImage = mutation({
+  args: {
+    segmentId: v.id("segments"),
+    prompt: v.string(),
+  },
+  async handler(ctx, args) {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("User not authenticated.");
+
+    const segment = await ctx.db.get(args.segmentId);
+    if (!segment) throw new Error("Segment not found.");
+
+    const story = await ctx.db.get(segment.storyId);
+    if (!story) throw new Error("Associated story not found.");
+
+    if (story.userId !== userId) {
+      throw new Error("User is not authorized to regenerate this image.");
+    }
+
+    await consumeCreditsHelper(ctx, userId, CREDIT_COSTS.IMAGE_GENERATION);
+
+    await ctx.db.patch(args.segmentId, {
+      isGenerating: true,
+      error: undefined,
+    });
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.replicate.regenerateSegmentImageUsingPrompt,
+      {
+        segmentId: args.segmentId,
+        prompt: args.prompt,
+      },
+    );
+  },
+});
+
 export const generateAndCreateSegment = internalAction({
   args: {
     userId: v.id("users"),
@@ -80,11 +116,15 @@ export const generateAndCreateSegment = internalAction({
   handler: async (ctx, args): Promise<{ success: boolean; error?: string }> => {
     let segmentId: Id<"segments"> | null = null;
     try {
-      // Create the segment entry first to make it visible in the UI
       segmentId = await ctx.runMutation(internal.segments.createSegment, {
         storyId: args.storyId,
         text: args.text,
         order: args.order,
+      });
+
+      await ctx.runMutation(internal.segments.updateSegmentStatus, {
+        segmentId,
+        isGenerating: true,
       });
 
       await ctx.runMutation(internal.credits.consumeCredits, {
@@ -92,7 +132,6 @@ export const generateAndCreateSegment = internalAction({
         cost: CREDIT_COSTS.IMAGE_GENERATION,
       });
 
-      // Generate the prompt
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
@@ -107,7 +146,6 @@ export const generateAndCreateSegment = internalAction({
       }
       const prompt = JSON.parse(content).prompt;
 
-      // Generate the image and update the segment
       await ctx.runAction(
         internal.replicate.regenerateSegmentImageUsingPrompt,
         {
@@ -120,7 +158,7 @@ export const generateAndCreateSegment = internalAction({
     } catch (error: any) {
       console.error("Failed to generate segment:", error);
       if (segmentId) {
-        await ctx.runMutation(internal.segments.updateSegment, {
+        await ctx.runMutation(internal.segments.updateSegmentStatus, {
           segmentId,
           isGenerating: false,
           error: error.message || "Unknown error",
@@ -142,7 +180,7 @@ export const createSegment = internalMutation({
       storyId: args.storyId,
       text: args.text,
       order: args.order,
-      isGenerating: true,
+      isGenerating: false,
     });
   },
 });
@@ -150,17 +188,70 @@ export const createSegment = internalMutation({
 export const get = query({
   args: { id: v.id("segments") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    const segment = await ctx.db.get(args.id);
+    if (!segment) return null;
+
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      // Unauthenticated users cannot get any segment
+      return null;
+    }
+
+    const story = await ctx.db.get(segment.storyId);
+    if (!story || story.userId !== userId) {
+      // User is not authorized to view this segment
+      return null;
+    }
+
+    const selectedVersion = segment.selectedVersionId
+      ? await ctx.db.get(segment.selectedVersionId)
+      : null;
+
+    return { ...segment, selectedVersion };
   },
 });
 
 export const getByStory = query({
   args: { storyId: v.id("story") },
   async handler(ctx, args) {
-    return await ctx.db
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      // Return empty array for unauthenticated users, or throw error, depending on desired public visibility
+      return [];
+    }
+    // Authorization check
+    const story = await ctx.db.get(args.storyId);
+    if (!story || story.userId !== userId) {
+      // If the story doesn't exist or doesn't belong to the user, return empty.
+      return [];
+    }
+
+    const segments = await ctx.db
       .query("segments")
       .withIndex("by_story_order", (q) => q.eq("storyId", args.storyId))
       .collect();
+
+    const versionIds = segments
+      .map((s) => s.selectedVersionId)
+      .filter((id) => id !== undefined) as Id<"imageVersions">[];
+
+    if (versionIds.length === 0) {
+      return segments.map((s) => ({ ...s, selectedVersion: null }));
+    }
+
+    const versions = await ctx.db
+      .query("imageVersions")
+      .filter((q) => q.or(...versionIds.map((id) => q.eq(q.field("_id"), id))))
+      .collect();
+
+    const versionsById = new Map(versions.map((v) => [v._id, v]));
+
+    return segments.map((segment) => ({
+      ...segment,
+      selectedVersion: segment.selectedVersionId
+        ? (versionsById.get(segment.selectedVersionId) ?? null)
+        : null,
+    }));
   },
 });
 
@@ -171,13 +262,10 @@ export const getSegmentInternal = internalQuery({
   },
 });
 
-export const updateSegment = internalMutation({
+export const updateSegmentStatus = internalMutation({
   args: {
     segmentId: v.id("segments"),
     isGenerating: v.optional(v.boolean()),
-    image: v.optional(v.id("_storage")),
-    previewImage: v.optional(v.id("_storage")),
-    prompt: v.optional(v.string()),
     error: v.optional(v.string()),
   },
   async handler(ctx, args) {

@@ -17,6 +17,7 @@ import type * as email_templates_subscriptionEmail from "../email/templates/subs
 import type * as env from "../env.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
+import type * as imageVersions from "../imageVersions.js";
 import type * as init from "../init.js";
 import type * as messages from "../messages.js";
 import type * as otp_ResendOTP from "../otp/ResendOTP.js";
@@ -52,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   env: typeof env;
   files: typeof files;
   http: typeof http;
+  imageVersions: typeof imageVersions;
   init: typeof init;
   messages: typeof messages;
   "otp/ResendOTP": typeof otp_ResendOTP;

@@ -147,13 +147,19 @@ const schema = defineSchema({
     text: v.string(),
     order: v.number(),
     isGenerating: v.boolean(),
-    image: v.optional(v.id("_storage")),
-    previewImage: v.optional(v.id("_storage")),
-    prompt: v.optional(v.string()),
+    selectedVersionId: v.optional(v.id("imageVersions")),
     error: v.optional(v.string()),
   })
     .index("by_story", ["storyId"])
     .index("by_story_order", ["storyId", "order"]),
+  imageVersions: defineTable({
+    segmentId: v.id("segments"),
+    userId: v.id("users"),
+    prompt: v.optional(v.string()),
+    image: v.id("_storage"),
+    previewImage: v.id("_storage"),
+    source: v.union(v.literal("ai_generated"), v.literal("user_uploaded")),
+  }).index("by_segment", ["segmentId"]),
   userMessages: defineTable({
     userId: v.id("users"),
     prompt: v.string(),
