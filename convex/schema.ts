@@ -49,6 +49,7 @@ export const storyStatusValidator = v.union(
   v.literal("draft"),
   v.literal("unpublished"),
   v.literal("published"),
+  v.literal("archived"),
 );
 export type StoryStatus = Infer<typeof storyStatusValidator>;
 

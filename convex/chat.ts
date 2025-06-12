@@ -4,16 +4,15 @@ import { StreamId } from "@convex-dev/persistent-text-streaming";
 import { OpenAI } from "openai";
 import { streamingComponent } from "./streaming";
 import { Id } from "./_generated/dataModel";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 const openai = new OpenAI();
 
 export const streamChat = httpAction(async (ctx, request) => {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) {
+  const userId = (await getAuthUserId(ctx)) as Id<"users">;
+  if (!userId) {
     return new Response("Unauthorized", { status: 401 });
   }
-
-  const userId = identity.subject.split("|")[0] as Id<"users">;
 
   let streamId: StreamId;
   try {
