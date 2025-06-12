@@ -20,6 +20,26 @@ function getSystemPrompt(context?: string) {
   const contextString =
     context || `{"style_bible": {"visual_theme": "${defaultStyle}"}}`;
 
+  // Dynamically add keywords based on the style guide
+  let dynamicKeywords = "";
+  try {
+    const parsedContext = JSON.parse(contextString);
+    const theme = parsedContext?.style_bible?.visual_theme?.toLowerCase() || "";
+    if (theme.includes("cinematic")) {
+      dynamicKeywords +=
+        ", cinematic lighting, epic composition, ultra-detailed, film grain, anamorphic lens flare";
+    }
+    if (theme.includes("anime") || theme.includes("animation")) {
+      dynamicKeywords +=
+        ", trending on pixiv, studio ghibli style, clean line art";
+    }
+    if (theme.includes("photo")) {
+      dynamicKeywords += ", photorealistic, 8k, sharp focus, f/1.8";
+    }
+  } catch (e) {
+    // Ignore parsing errors, just use the default
+  }
+
   return `You are an expert prompt engineer for text-to-image models. Your mission is to generate a high-quality, detailed image prompt **IN ENGLISH**.
 
 You will be given a "Style Bible" and a "Scene Description". Both might be in a language other than English. You must first understand their meaning and then synthesize them into a single, cohesive, and descriptive prompt for an image generation model.
@@ -27,9 +47,10 @@ You will be given a "Style Bible" and a "Scene Description". Both might be in a 
 **IMPORTANT RULES**:
 1.  **Output Language**: The final output prompt inside the JSON object MUST be in **ENGLISH**.
 2.  **Synthesize, Don't Just Translate**: Do not just literally translate the words. Understand the artistic direction from the Style Bible and the narrative moment from the Scene Description, and combine them into a powerful visual instruction.
-3.  **Technical Details**: Incorporate advanced photographic and artistic terms into the English prompt (e.g., "cinematic lighting," "low-angle shot," "dynamic composition," "hyper-detailed," "Unreal Engine 5 render").
+3.  **Technical Details**: Incorporate advanced photographic and artistic terms. Start with the core description, then append stylistic keywords.
 4.  **Adherence**: Strictly adhere to the visual and thematic elements described in the Style Bible.
-5.  **Output Format**: Respond with ONLY a single JSON object with one key: "prompt". The value of "prompt" should be the final, English-language image prompt.
+5.  **Final Prompt Structure**: The final prompt should be a series of descriptive phrases, separated by commas. It should incorporate these dynamic keywords: "${dynamicKeywords}".
+6.  **Output Format**: Respond with ONLY a single JSON object with one key: "prompt". The value of "prompt" should be the final, English-language image prompt.
 
 **STYLE BIBLE (JSON)**:
 ${contextString}
@@ -100,6 +121,51 @@ export const regenerateImage = mutation({
       {
         segmentId: args.segmentId,
         prompt: args.prompt,
+      },
+    );
+  },
+});
+
+export const editImage = mutation({
+  args: {
+    segmentId: v.id("segments"),
+    prompt: v.string(),
+    versionIdToEdit: v.id("imageVersions"),
+  },
+  async handler(ctx, args) {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("User not authenticated.");
+
+    const segment = await ctx.db.get(args.segmentId);
+    if (!segment) throw new Error("Segment not found.");
+
+    const story = await ctx.db.get(segment.storyId);
+    if (!story) throw new Error("Associated story not found.");
+
+    if (story.userId !== userId) {
+      throw new Error("User is not authorized to edit this image.");
+    }
+
+    const versionToEdit = await ctx.db.get(args.versionIdToEdit);
+    if (!versionToEdit || versionToEdit.segmentId !== args.segmentId) {
+      throw new Error("Version to edit is not valid for this segment.");
+    }
+
+    await consumeCreditsHelper(ctx, userId, CREDIT_COSTS.IMAGE_GENERATION);
+
+    await ctx.db.patch(args.segmentId, {
+      isGenerating: true,
+      error: undefined,
+    });
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.replicate.editSegmentImageUsingPrompt,
+      {
+        segmentId: args.segmentId,
+        newInstruction: args.prompt,
+        versionIdToEdit: args.versionIdToEdit,
+        originalPrompt: versionToEdit.prompt,
       },
     );
   },

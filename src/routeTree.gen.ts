@@ -33,6 +33,7 @@ import { Route as AppAuthDashboardLayoutSettingsImport } from './routes/_app/_au
 import { Route as AppAuthDashboardLayoutCheckoutImport } from './routes/_app/_auth/dashboard/_layout.checkout'
 import { Route as AppAuthStoriesLayoutStoryIdIndexImport } from './routes/_app/_auth/stories/_layout/$storyId/index'
 import { Route as AppAuthDashboardLayoutSettingsIndexImport } from './routes/_app/_auth/dashboard/_layout.settings.index'
+import { Route as AppAuthStoriesLayoutStoryIdStyleImport } from './routes/_app/_auth/stories/_layout/$storyId/style'
 import { Route as AppAuthStoriesLayoutStoryIdRefineImport } from './routes/_app/_auth/stories/_layout/$storyId/refine'
 import { Route as AppAuthDashboardLayoutSettingsBillingImport } from './routes/_app/_auth/dashboard/_layout.settings.billing'
 import { Route as AppAuthStoriesLayoutStoryIdSegmentsSegmentIdIndexImport } from './routes/_app/_auth/stories/_layout/$storyId/segments/$segmentId/index'
@@ -197,6 +198,13 @@ const AppAuthDashboardLayoutSettingsIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => AppAuthDashboardLayoutSettingsRoute,
+  } as any)
+
+const AppAuthStoriesLayoutStoryIdStyleRoute =
+  AppAuthStoriesLayoutStoryIdStyleImport.update({
+    id: '/style',
+    path: '/style',
+    getParentRoute: () => AppAuthStoriesLayoutStoryIdRoute,
   } as any)
 
 const AppAuthStoriesLayoutStoryIdRefineRoute =
@@ -399,6 +407,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAuthStoriesLayoutStoryIdRefineImport
       parentRoute: typeof AppAuthStoriesLayoutStoryIdImport
     }
+    '/_app/_auth/stories/_layout/$storyId/style': {
+      id: '/_app/_auth/stories/_layout/$storyId/style'
+      path: '/style'
+      fullPath: '/stories/$storyId/style'
+      preLoaderRoute: typeof AppAuthStoriesLayoutStoryIdStyleImport
+      parentRoute: typeof AppAuthStoriesLayoutStoryIdImport
+    }
     '/_app/_auth/dashboard/_layout/settings/': {
       id: '/_app/_auth/dashboard/_layout/settings/'
       path: '/'
@@ -525,6 +540,7 @@ const AppAuthOnboardingRouteWithChildren =
 
 interface AppAuthStoriesLayoutStoryIdRouteChildren {
   AppAuthStoriesLayoutStoryIdRefineRoute: typeof AppAuthStoriesLayoutStoryIdRefineRoute
+  AppAuthStoriesLayoutStoryIdStyleRoute: typeof AppAuthStoriesLayoutStoryIdStyleRoute
   AppAuthStoriesLayoutStoryIdIndexRoute: typeof AppAuthStoriesLayoutStoryIdIndexRoute
   AppAuthStoriesLayoutStoryIdSegmentsSegmentIdIndexRoute: typeof AppAuthStoriesLayoutStoryIdSegmentsSegmentIdIndexRoute
 }
@@ -533,6 +549,8 @@ const AppAuthStoriesLayoutStoryIdRouteChildren: AppAuthStoriesLayoutStoryIdRoute
   {
     AppAuthStoriesLayoutStoryIdRefineRoute:
       AppAuthStoriesLayoutStoryIdRefineRoute,
+    AppAuthStoriesLayoutStoryIdStyleRoute:
+      AppAuthStoriesLayoutStoryIdStyleRoute,
     AppAuthStoriesLayoutStoryIdIndexRoute:
       AppAuthStoriesLayoutStoryIdIndexRoute,
     AppAuthStoriesLayoutStoryIdSegmentsSegmentIdIndexRoute:
@@ -643,6 +661,7 @@ export interface FileRoutesByFullPath {
   '/stories/': typeof AppAuthStoriesLayoutIndexRoute
   '/dashboard/settings/billing': typeof AppAuthDashboardLayoutSettingsBillingRoute
   '/stories/$storyId/refine': typeof AppAuthStoriesLayoutStoryIdRefineRoute
+  '/stories/$storyId/style': typeof AppAuthStoriesLayoutStoryIdStyleRoute
   '/dashboard/settings/': typeof AppAuthDashboardLayoutSettingsIndexRoute
   '/stories/$storyId/': typeof AppAuthStoriesLayoutStoryIdIndexRoute
   '/stories/$storyId/segments/$segmentId': typeof AppAuthStoriesLayoutStoryIdSegmentsSegmentIdIndexRoute
@@ -662,6 +681,7 @@ export interface FileRoutesByTo {
   '/onboarding/username': typeof AppAuthOnboardingLayoutUsernameRoute
   '/dashboard/settings/billing': typeof AppAuthDashboardLayoutSettingsBillingRoute
   '/stories/$storyId/refine': typeof AppAuthStoriesLayoutStoryIdRefineRoute
+  '/stories/$storyId/style': typeof AppAuthStoriesLayoutStoryIdStyleRoute
   '/dashboard/settings': typeof AppAuthDashboardLayoutSettingsIndexRoute
   '/stories/$storyId': typeof AppAuthStoriesLayoutStoryIdIndexRoute
   '/stories/$storyId/segments/$segmentId': typeof AppAuthStoriesLayoutStoryIdSegmentsSegmentIdIndexRoute
@@ -694,6 +714,7 @@ export interface FileRoutesById {
   '/_app/_auth/stories/_layout/': typeof AppAuthStoriesLayoutIndexRoute
   '/_app/_auth/dashboard/_layout/settings/billing': typeof AppAuthDashboardLayoutSettingsBillingRoute
   '/_app/_auth/stories/_layout/$storyId/refine': typeof AppAuthStoriesLayoutStoryIdRefineRoute
+  '/_app/_auth/stories/_layout/$storyId/style': typeof AppAuthStoriesLayoutStoryIdStyleRoute
   '/_app/_auth/dashboard/_layout/settings/': typeof AppAuthDashboardLayoutSettingsIndexRoute
   '/_app/_auth/stories/_layout/$storyId/': typeof AppAuthStoriesLayoutStoryIdIndexRoute
   '/_app/_auth/stories/_layout/$storyId/segments/$segmentId/': typeof AppAuthStoriesLayoutStoryIdSegmentsSegmentIdIndexRoute
@@ -721,6 +742,7 @@ export interface FileRouteTypes {
     | '/stories/'
     | '/dashboard/settings/billing'
     | '/stories/$storyId/refine'
+    | '/stories/$storyId/style'
     | '/dashboard/settings/'
     | '/stories/$storyId/'
     | '/stories/$storyId/segments/$segmentId'
@@ -739,6 +761,7 @@ export interface FileRouteTypes {
     | '/onboarding/username'
     | '/dashboard/settings/billing'
     | '/stories/$storyId/refine'
+    | '/stories/$storyId/style'
     | '/dashboard/settings'
     | '/stories/$storyId'
     | '/stories/$storyId/segments/$segmentId'
@@ -769,6 +792,7 @@ export interface FileRouteTypes {
     | '/_app/_auth/stories/_layout/'
     | '/_app/_auth/dashboard/_layout/settings/billing'
     | '/_app/_auth/stories/_layout/$storyId/refine'
+    | '/_app/_auth/stories/_layout/$storyId/style'
     | '/_app/_auth/dashboard/_layout/settings/'
     | '/_app/_auth/stories/_layout/$storyId/'
     | '/_app/_auth/stories/_layout/$storyId/segments/$segmentId/'
@@ -929,6 +953,7 @@ export const routeTree = rootRoute
       "parent": "/_app/_auth/stories/_layout",
       "children": [
         "/_app/_auth/stories/_layout/$storyId/refine",
+        "/_app/_auth/stories/_layout/$storyId/style",
         "/_app/_auth/stories/_layout/$storyId/",
         "/_app/_auth/stories/_layout/$storyId/segments/$segmentId/"
       ]
@@ -951,6 +976,10 @@ export const routeTree = rootRoute
     },
     "/_app/_auth/stories/_layout/$storyId/refine": {
       "filePath": "_app/_auth/stories/_layout/$storyId/refine.tsx",
+      "parent": "/_app/_auth/stories/_layout/$storyId"
+    },
+    "/_app/_auth/stories/_layout/$storyId/style": {
+      "filePath": "_app/_auth/stories/_layout/$storyId/style.tsx",
       "parent": "/_app/_auth/stories/_layout/$storyId"
     },
     "/_app/_auth/dashboard/_layout/settings/": {

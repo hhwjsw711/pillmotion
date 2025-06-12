@@ -1,5 +1,8 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { TextEditor } from "../../-components/text-editor";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import {
+  TextEditor,
+  useEditorCharacterCount,
+} from "../../-components/text-editor";
 import { Id } from "~/convex/_generated/dataModel";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { convexQuery, useConvexMutation } from "@convex-dev/react-query";
@@ -16,7 +19,14 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/ui/dialog";
-import { Smartphone, Monitor, Loader2, Sparkles } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Smartphone,
+  Monitor,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { StoryFormat } from "~/convex/schema";
@@ -49,6 +59,8 @@ export default function RefineStory() {
     }),
   );
 
+  const charCount = useEditorCharacterCount(storyId);
+
   const { mutateAsync: generateSegments, isPending } = useMutation({
     mutationFn: useConvexMutation(api.story.generateSegments),
   });
@@ -72,43 +84,64 @@ export default function RefineStory() {
   };
 
   return (
-    <div className="flex h-full justify-center py-4 md:py-8">
-      <div className={cn("flex h-full w-full max-w-4xl flex-col")}>
-        {story && (
-          <EditableTitle storyId={storyId} initialTitle={story.title} />
-        )}
-        <div className="mb-2 px-4 text-muted-foreground text-xs md:px-8">
-          <span>
-            最后更新:{" "}
-            {story?.updatedAt && new Date(story.updatedAt).toLocaleString()}
-          </span>
-        </div>
-        <div className="relative w-full flex-1">
-          <div
-            className={cn(
-              "h-full w-full resize-none whitespace-pre-wrap bg-transparent px-4 font-serif text-base outline-none placeholder:text-muted-foreground/50 md:px-8",
-            )}
-          >
+    <div className="h-full flex flex-col">
+      {/* Centered container for the main content */}
+      <div className="w-full max-w-4xl mx-auto flex-1 flex flex-col px-4 sm:px-6 lg:px-8 pb-4 md:pb-8">
+        {/* Header Section */}
+        <header className="flex-shrink-0 pt-2">
+          <div className="mb-4">
+            <Button variant="ghost" size="sm" asChild className="-ml-3">
+              <Link to="/stories/$storyId" params={{ storyId }}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                返回故事详情
+              </Link>
+            </Button>
+          </div>
+          {story && (
+            <div className="space-y-2">
+              <EditableTitle storyId={storyId} initialTitle={story.title} />
+              <div className="text-muted-foreground text-xs">
+                <span>
+                  最后更新:{" "}
+                  {new Date(story.updatedAt).toLocaleString()}
+                </span>
+              </div>
+            </div>
+          )}
+        </header>
+
+        {/* Editor Section */}
+        <main className="flex-1 flex flex-col mt-6 min-h-0">
+          <div className="flex-1 w-full relative">
             <TextEditor id={storyId} />
           </div>
-        </div>
+          <footer className="flex-shrink-0 py-2 border-t text-xs text-muted-foreground flex justify-between items-center">
+            <span>字数: {charCount}</span>
+            <span className="flex items-center gap-1.5 text-green-600">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              已自动保存
+            </span>
+          </footer>
+        </main>
       </div>
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+
+      {/* Floating Action Button */}
+      <div className="fixed bottom-8 right-8 z-50">
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="default"
-                  size="icon"
-                  className="h-12 w-12 shadow-lg"
+                  className="h-12 w-auto px-6 shadow-lg rounded-full"
                   onClick={() => setIsOpen(true)}
                 >
-                  <Sparkles className="h-5 w-5" />
+                  <Sparkles className="mr-2 h-5 w-5" />
+                  生成片段
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>生成片段</p>
+                <p>完成编辑后，生成所有场景</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

@@ -1,64 +1,63 @@
 import { Input } from "@/ui/input";
-import { useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { api } from "~/convex/_generated/api";
 import { useConvexMutation } from "@convex-dev/react-query";
+import { api } from "~/convex/_generated/api";
 import { Id } from "~/convex/_generated/dataModel";
+import { useState } from "react";
 import { toast } from "sonner";
+import { Loader2, CheckCircle2 } from "lucide-react";
 
-interface EditableTitleProps {
+export function EditableTitle({
+  storyId,
+  initialTitle,
+}: {
   storyId: Id<"story">;
   initialTitle: string;
-}
-
-export function EditableTitle({ storyId, initialTitle }: EditableTitleProps) {
-  const [isPending, setIsPending] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const updateTitle = useConvexMutation(api.story.updateStoryTitle);
-
-  const { mutate } = useMutation({
-    mutationFn: async (title: string) => {
-      await updateTitle({ storyId, title });
-    },
+}) {
+  const [isSuccess, setIsSuccess] = useState(false);
+  const { mutate, isPending } = useMutation({
+    mutationFn: useConvexMutation(api.story.updateStoryTitle),
     onSuccess: () => {
-      toast.success("标题已更新");
-      if (inputRef.current) {
-        inputRef.current.blur();
-      }
+      setIsSuccess(true);
+      const timer = setTimeout(() => setIsSuccess(false), 2000);
+      return () => clearTimeout(timer);
     },
-    onError: (error) => {
-      toast.error("更新失败：" + error.message);
-    }
+    onError: (err) => {
+      toast.error("标题更新失败", {
+        description: err.message,
+      });
+    },
   });
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      setIsPending(true);
-      mutate(e.currentTarget.value, {
-        onSettled: () => setIsPending(false)
-      });
+      e.currentTarget.blur();
     }
   };
 
   return (
-    <div className="mb-2 px-4 md:px-8">
+    <div className="flex items-center gap-2">
       <Input
-        ref={inputRef}
         defaultValue={initialTitle}
         onKeyDown={handleKeyDown}
         onBlur={(e) => {
-          if (e.target.value !== initialTitle) {
-            setIsPending(true);
-            mutate(e.target.value, {
-              onSettled: () => setIsPending(false)
-            });
+          const newTitle = e.target.value.trim();
+          if (newTitle && newTitle !== initialTitle) {
+            mutate({ storyId, title: newTitle });
           }
         }}
         disabled={isPending}
-        className="!text-2xl h-8 border-none bg-transparent p-0 font-semibold focus-visible:ring-0"
+        className="w-full !text-2xl h-auto border-none bg-transparent p-0 font-semibold focus-visible:ring-0"
         aria-label="故事标题"
       />
+      <div className="h-6 w-6">
+        {isPending ? (
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        ) : isSuccess ? (
+          <CheckCircle2 className="h-5 w-5 text-green-500" />
+        ) : null}
+      </div>
     </div>
   );
 }

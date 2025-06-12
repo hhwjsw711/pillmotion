@@ -3,6 +3,7 @@ import {
   mutation,
   query,
   internalAction,
+  internalQuery,
 } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
@@ -45,7 +46,11 @@ export const createAndSelectVersion = internalMutation({
     prompt: v.optional(v.string()),
     image: v.id("_storage"),
     previewImage: v.id("_storage"),
-    source: v.union(v.literal("ai_generated"), v.literal("user_uploaded")),
+    source: v.union(
+      v.literal("ai_generated"),
+      v.literal("user_uploaded"),
+      v.literal("ai_edited"),
+    ),
   },
   async handler(ctx, args) {
     const { segmentId, ...versionArgs } = args;
@@ -194,5 +199,12 @@ export const selectVersion = mutation({
     await ctx.db.patch(args.segmentId, {
       selectedVersionId: args.versionId,
     });
+  },
+});
+
+export const getVersionInternal = internalQuery({
+  args: { versionId: v.id("imageVersions") },
+  async handler(ctx, args) {
+    return await ctx.db.get(args.versionId);
   },
 });

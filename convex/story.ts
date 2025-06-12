@@ -193,24 +193,25 @@ async function splitScriptIntoScenes(script: string): Promise<string[]> {
           content: `You are an expert film editor and script supervisor. Your task is to read a story script and break it down into a sequence of distinct scenes or 'shots'.
 
 A scene change typically occurs when:
-- The location changes (e.g., from the castle to the forest).
-- The time of day changes.
-- A new key character enters or exits.
-- A significant, distinct action takes place (e.g., the Queen talks to the mirror, the huntsman releases Snow White, Snow White bites the apple).
+- The location or setting changes (e.g., from a castle to a forest).
+- There is a significant jump in time (e.g., "The next day...", "Hours later...").
+- A new key character enters, or a key character begins a distinct action or dialogue.
+- The emotional tone or focus of the narrative shifts significantly.
 
 Each resulting scene should be a self-contained, visually coherent moment that can be reasonably illustrated by a single image. Preserve the original wording and language of the text.
 
 Output the result as a single JSON object with a single key "scenes", which contains an array of strings. Do not output anything else.
 
 Example Input:
-"A princess lived in a castle. One day, she ran into the dark forest. There, she found a small cottage."
+"A princess lived in a castle. One day, she ran into the dark forest. 'Where am I?' she wondered. She found a small cottage."
 
 Example Output:
 {
   "scenes": [
     "A princess lived in a castle.",
     "One day, she ran into the dark forest.",
-    "There, she found a small cottage."
+    "'Where am I?' she wondered.",
+    "She found a small cottage."
   ]
 }`,
         },
@@ -280,7 +281,7 @@ export const generateStoryOrchestrator = internalAction({
     }
 
     const context = await generateContext(story.script);
-    await ctx.runMutation(internal.story.updateStoryContext, {
+    await ctx.runMutation(internal.story.updateStoryContextInternal, {
       storyId,
       context,
     });
@@ -320,12 +321,24 @@ export const generateStoryOrchestrator = internalAction({
   },
 });
 
-export const updateStoryContext = internalMutation({
+export const updateStoryContextInternal = internalMutation({
   args: {
     storyId: v.id("story"),
     context: v.string(),
   },
   handler: async (ctx, args) => {
+    // No auth check needed here, as it's only called by trusted server code.
+    await ctx.db.patch(args.storyId, { context: args.context });
+  },
+});
+
+export const updateStoryContext = mutation({
+  args: {
+    storyId: v.id("story"),
+    context: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await verifyStoryOwnerHelper(ctx, args.storyId);
     await ctx.db.patch(args.storyId, { context: args.context });
   },
 });
@@ -350,7 +363,7 @@ async function generateContext(script: string) {
 
 The JSON object MUST contain exactly two top-level keys:
 1.  "story_outline": A concise, one-paragraph summary of the entire plot, including the beginning, key turning points, and the ending.
-2.  "style_bible": An object containing the visual style guide, which must include these keys: "visual_theme", "mood", "color_palette", "lighting_style", "character_design", "environment_design".
+2.  "style_bible": An object containing the visual style guide, which must include these keys: "visual_theme", "mood", "color_palette" (as a single comma-separated string, e.g., "bright blues, sunny yellows, coral pinks"), "lighting_style", "character_design", "environment_design".
 
 **IMPORTANT**: First, detect the primary language of the input script. The entire "story_outline" and all values within the "style_bible" MUST be written in this detected language. This ensures consistency for our international teams.
 

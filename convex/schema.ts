@@ -158,7 +158,11 @@ const schema = defineSchema({
     prompt: v.optional(v.string()),
     image: v.id("_storage"),
     previewImage: v.id("_storage"),
-    source: v.union(v.literal("ai_generated"), v.literal("user_uploaded")),
+    source: v.union(
+      v.literal("ai_generated"),
+      v.literal("user_uploaded"),
+      v.literal("ai_edited"),
+    ),
   }).index("by_segment", ["segmentId"]),
   userMessages: defineTable({
     userId: v.id("users"),

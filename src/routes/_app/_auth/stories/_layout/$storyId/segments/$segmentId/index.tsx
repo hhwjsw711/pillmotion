@@ -4,7 +4,14 @@ import { useMutation } from "@tanstack/react-query";
 import { useConvexMutation } from "@convex-dev/react-query";
 import { api } from "~/convex/_generated/api";
 import { Id, Doc } from "~/convex/_generated/dataModel";
-import { ArrowLeft, Sparkles, Loader2, CheckCircle2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Sparkles,
+  Loader2,
+  CheckCircle2,
+  Bot,
+  Info,
+} from "lucide-react";
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
 import { Textarea } from "@/ui/textarea";
@@ -12,6 +19,13 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/utils/misc";
 import { ImageUploader } from "../../../../-components/image-uploader";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/ui/tooltip";
 
 export const Route = createFileRoute(
   "/_app/_auth/stories/_layout/$storyId/segments/$segmentId/",
@@ -57,7 +71,12 @@ function VersionCard({
         </p>
       )}
       <p className="text-xs text-muted-foreground">
-        来源: {version.source === "ai_generated" ? "AI 生成" : "用户上传"}
+        来源:{" "}
+        {version.source === "ai_generated"
+          ? "AI 生成"
+          : version.source === "ai_edited"
+            ? "AI 编辑"
+            : "用户上传"}
       </p>
       <Button
         variant={isSelected ? "default" : "secondary"}
@@ -76,6 +95,7 @@ function VersionCard({
 export default function SegmentEditor() {
   const { storyId, segmentId } = Route.useParams();
   const [promptText, setPromptText] = useState("");
+  const [tuningPrompt, setTuningPrompt] = useState("");
   const prevIsGenerating = useRef<boolean | undefined>();
 
   const segment = useQuery(api.segments.get, {
@@ -95,6 +115,10 @@ export default function SegmentEditor() {
     useMutation({
       mutationFn: useConvexMutation(api.segments.regenerateImage),
     });
+
+  const { mutateAsync: editImage, isPending: isEditing } = useMutation({
+    mutationFn: useConvexMutation(api.segments.editImage),
+  });
 
   const { mutate: selectVersion, isPending: isSelecting } = useMutation({
     mutationFn: useConvexMutation(api.imageVersions.selectVersion),
@@ -145,10 +169,29 @@ export default function SegmentEditor() {
     toast.success("新的图片生成任务已开始！");
   };
 
-  const isProcessing = segment?.isGenerating || isRegenerating;
+  const handleEditImage = async () => {
+    if (!tuningPrompt.trim()) {
+      toast.error("编辑指令不能为空");
+      return;
+    }
+    if (!selectedVersion) {
+      toast.error("请先选择一个要编辑的版本");
+      return;
+    }
+
+    await editImage({
+      segmentId: segmentId as Id<"segments">,
+      prompt: tuningPrompt,
+      versionIdToEdit: selectedVersion._id,
+    });
+    toast.success("图片编辑任务已开始！");
+    setTuningPrompt(""); // Clear input after submission
+  };
+
+  const isProcessing = segment?.isGenerating || isRegenerating || isEditing;
 
   return (
-    <div className="container mx-auto max-w-5xl p-4">
+    <div className="container mx-auto max-w-5xl p-4 pt-2">
       <div className="mb-4">
         <Button asChild variant="ghost" size="sm">
           <Link to="/stories/$storyId" params={{ storyId }}>
@@ -188,35 +231,118 @@ export default function SegmentEditor() {
                   </div>
                 )}
               </div>
-              <div className="space-y-4 rounded-lg border bg-background p-4">
-                <h3 className="font-semibold">创建新版本</h3>
-                <p className="text-sm text-muted-foreground">
-                  在这里通过修改 Prompt 来生成新的图片版本。
-                </p>
-                <div className="grid w-full gap-2">
-                  <Label htmlFor="prompt-input">AI 绘图指令 (Prompt)</Label>
-                  <Textarea
-                    id="prompt-input"
-                    placeholder="请输入详细的英文 Prompt..."
-                    rows={6}
-                    value={promptText}
-                    onChange={(e) => setPromptText(e.target.value)}
-                    disabled={isProcessing}
-                  />
-                </div>
-                <Button
-                  onClick={handleRegenerate}
-                  disabled={isProcessing}
-                  className="w-full"
-                >
-                  {isProcessing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
+              <Tabs defaultValue="edit" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="edit">
+                    <Bot className="mr-2 h-4 w-4" />
+                    聊天编辑
+                  </TabsTrigger>
+                  <TabsTrigger value="generate">
                     <Sparkles className="mr-2 h-4 w-4" />
-                  )}
-                  {isProcessing ? "处理中..." : "生成新版本"}
-                </Button>
-              </div>
+                    生成新图
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="edit">
+                  <div className="space-y-4 rounded-b-lg border border-t-0 bg-background p-4">
+                    <div className="flex justify-between items-center">
+                      <p className="text-sm text-muted-foreground">
+                        使用聊天的方式来修改当前选中的图片。
+                      </p>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                            >
+                              <Info className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs" side="top">
+                            <div className="p-2 space-y-2 text-left">
+                              <h4 className="font-semibold">编辑技巧</h4>
+                              <ul className="list-disc list-inside text-xs space-y-1">
+                                <li>
+                                  <b>修改文字:</b> 使用引号，例如:
+                                  <br />
+                                  "把 '你好' 改成 '再见'"
+                                </li>
+                                <li>
+                                  <b>保留主体:</b> 明确指出要保留什么，例如:
+                                  <br />
+                                  "背景换成海滩，人物保持不变"
+                                </li>
+                                <li>
+                                  <b>风格迁移:</b> "变成梵高风格的油画"
+                                </li>
+                              </ul>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    <div className="grid w-full gap-2">
+                      <Label htmlFor="tuning-prompt-input">编辑指令</Label>
+                      <Textarea
+                        id="tuning-prompt-input"
+                        placeholder="例如: 让他微笑 / 换成夜晚的场景，加上月亮 / 给他一副墨镜 / 变成梵高风格的油画"
+                        rows={3}
+                        value={tuningPrompt}
+                        onChange={(e) => setTuningPrompt(e.target.value)}
+                        disabled={isProcessing || !selectedVersion}
+                      />
+                      {!selectedVersion && !isProcessing && (
+                        <p className="text-xs text-amber-600 dark:text-amber-500">
+                          请先从右侧版本历史中选择一张图片以开始编辑。
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      onClick={handleEditImage}
+                      disabled={isProcessing || !selectedVersion}
+                      className="w-full"
+                    >
+                      {isEditing ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Bot className="mr-2 h-4 w-4" />
+                      )}
+                      {isEditing ? "编辑中..." : "发送指令"}
+                    </Button>
+                  </div>
+                </TabsContent>
+                <TabsContent value="generate">
+                  <div className="space-y-4 rounded-b-lg border border-t-0 bg-background p-4">
+                    <p className="text-sm text-muted-foreground">
+                      在这里通过修改 Prompt 来生成一个全新的图片版本。
+                    </p>
+                    <div className="grid w-full gap-2">
+                      <Label htmlFor="prompt-input">AI 绘图指令 (Prompt)</Label>
+                      <Textarea
+                        id="prompt-input"
+                        placeholder="请输入详细的英文 Prompt..."
+                        rows={6}
+                        value={promptText}
+                        onChange={(e) => setPromptText(e.target.value)}
+                        disabled={isProcessing}
+                      />
+                    </div>
+                    <Button
+                      onClick={handleRegenerate}
+                      disabled={isProcessing}
+                      className="w-full"
+                    >
+                      {isRegenerating ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="mr-2 h-4 w-4" />
+                      )}
+                      {isRegenerating ? "生成中..." : "生成新版本"}
+                    </Button>
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
 
             <div className="w-full md:w-80 space-y-4">

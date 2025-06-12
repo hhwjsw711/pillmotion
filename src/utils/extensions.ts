@@ -3,6 +3,7 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import Typography from "@tiptap/extension-typography";
 import Underline from "@tiptap/extension-underline";
+import CharacterCount from "@tiptap/extension-character-count";
 
 export const extensions = [
   StarterKit,
@@ -12,4 +13,5 @@ export const extensions = [
   TaskList,
   Typography,
   Underline,
+  CharacterCount,
 ];

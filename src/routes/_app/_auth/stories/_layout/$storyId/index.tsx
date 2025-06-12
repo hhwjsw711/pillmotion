@@ -4,6 +4,8 @@ import { useQuery } from "convex/react";
 import { api } from "~/convex/_generated/api";
 import { Doc, Id } from "~/convex/_generated/dataModel";
 import { Spinner } from "@/ui/spinner";
+import { Button } from "@/ui/button";
+import { ArrowLeft, Edit, Settings, Clapperboard } from "lucide-react";
 
 export const Route = createFileRoute("/_app/_auth/stories/_layout/$storyId/")({
   component: Story,
@@ -32,8 +34,8 @@ export default function Story() {
   }
 
   return (
-    <div className="flex h-full justify-center py-4 md:py-8">
-      <div className="flex h-full w-full max-w-6xl flex-col space-y-8">
+    <div className="flex h-full justify-center pt-2 pb-4 md:pb-8">
+      <div className="flex h-full w-full max-w-6xl flex-col space-y-8 px-4">
         <StorySection story={story} />
       </div>
     </div>
@@ -42,25 +44,54 @@ export default function Story() {
 
 function StorySection({ story }: { story: Doc<"story"> }) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-            {story.title}
-          </h2>
-          {story.generationStatus === "processing" && (
-            <span className="flex items-center gap-1 text-sm text-blue-500">
-              <Spinner />
-              生成中...
-            </span>
-          )}
-          {story.generationStatus === "error" && (
-            <span className="text-sm text-red-500">生成失败</span>
-          )}
+    <div className="space-y-6">
+      <div className="space-y-4">
+        <Button variant="ghost" size="sm" asChild className="pl-0">
+          <Link to="/stories">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            返回我的故事集
+          </Link>
+        </Button>
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b pb-4">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              {story.title}
+            </h1>
+            {story.generationStatus === "processing" && (
+              <span className="flex items-center gap-1 text-sm text-blue-500">
+                <Spinner />
+                生成中...
+              </span>
+            )}
+            {story.generationStatus === "error" && (
+              <span className="text-sm text-red-500">生成失败</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link
+                to="/stories/$storyId/refine"
+                params={{ storyId: story._id }}
+              >
+                <Edit className="mr-2 h-4 w-4" />
+                编辑剧本
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link
+                to="/stories/$storyId/style"
+                params={{ storyId: story._id }}
+              >
+                <Settings className="h-4 w-4" />
+                <span className="ml-2">风格设置</span>
+              </Link>
+            </Button>
+            <Button variant="secondary" disabled>
+              <Clapperboard className="mr-2 h-4 w-4" />
+              导出视频
+            </Button>
+          </div>
         </div>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
-          {new Date(story.updatedAt).toLocaleDateString("zh-CN")}
-        </span>
       </div>
       <StorySegments story={story} />
     </div>
@@ -122,10 +153,18 @@ function StorySegments({ story }: { story: Doc<"story"> }) {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
-      {segments.map((segment) => (
-        <SegmentCard key={segment._id} segment={segment} />
-      ))}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          共 {segments.length} 个场景
+        </p>
+        {/* Future: Add sorting and "Add Scene" button here */}
+      </div>
+      <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
+        {segments.map((segment) => (
+          <SegmentCard key={segment._id} segment={segment} />
+        ))}
+      </div>
     </div>
   );
 }
