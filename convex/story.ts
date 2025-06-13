@@ -151,7 +151,40 @@ export const updateStoryTitle = mutation({
 export const deleteStory = mutation({
   args: { storyId: v.id("story") },
   handler: async (ctx, args) => {
+    // 1. Verify ownership. This will throw an error if the user is not the owner.
     await verifyStoryOwnerHelper(ctx, args.storyId);
+
+    // 2. Get all segments for the story using the correct index name "by_story".
+    const segments = await ctx.db
+      .query("segments")
+      .withIndex("by_story", (q) => q.eq("storyId", args.storyId))
+      .collect();
+
+    // 3. Iterate through segments to delete related data
+    for (const segment of segments) {
+      // 3a. Get all image versions for the segment using the correct index name "by_segment".
+      const imageVersions = await ctx.db
+        .query("imageVersions")
+        .withIndex("by_segment", (q) => q.eq("segmentId", segment._id))
+        .collect();
+
+      // 3b. Delete associated files from storage and the image version documents
+      // using the correct field names "image" and "previewImage".
+      for (const version of imageVersions) {
+        if (version.image) {
+          await ctx.storage.delete(version.image);
+        }
+        if (version.previewImage) {
+          await ctx.storage.delete(version.previewImage);
+        }
+        await ctx.db.delete(version._id);
+      }
+
+      // 3c. Delete the segment document itself
+      await ctx.db.delete(segment._id);
+    }
+
+    // 4. Finally, delete the story document
     await ctx.db.delete(args.storyId);
   },
 });

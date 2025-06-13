@@ -1,173 +1,212 @@
-import { useState, useRef, useEffect } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useState, useRef, useEffect, forwardRef } from "react";
+import { useQuery } from "convex/react";
+import { useConvexMutation } from "@convex-dev/react-query";
+import { useMutation as useTanstackMutation } from "@tanstack/react-query";
 import { api } from "~/convex/_generated/api";
 import { Doc } from "~/convex/_generated/dataModel";
 import { Link } from "@tanstack/react-router";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/ui/alert-dialog";
+import { toast } from "sonner";
+import { Loader2, GripVertical, MoreHorizontal } from "lucide-react";
 
 type SegmentWithVersion = Doc<"segments"> & {
   selectedVersion: Doc<"imageVersions"> | null;
 };
 
-interface SegmentCardProps {
+interface SegmentCardProps extends React.HTMLAttributes<HTMLDivElement> {
   segment: SegmentWithVersion;
+  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
 }
 
-export function SegmentCard({ segment }: SegmentCardProps) {
-  const previewImageUrl = useQuery(
-    api.files.getUrl,
-    segment.selectedVersion?.previewImage
-      ? { storageId: segment.selectedVersion.previewImage }
-      : "skip",
-  );
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
+  ({ segment, dragHandleProps, ...props }, ref) => {
+    const previewImageUrl = useQuery(
+      api.files.getUrl,
+      segment.selectedVersion?.previewImage
+        ? { storageId: segment.selectedVersion.previewImage }
+        : "skip",
+    );
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const [text, setText] = useState(segment.text);
-  const updateTextMutation = useMutation(api.segments.updateSegmentText);
+    const [text, setText] = useState(segment.text);
+    const updateTextMutation = useConvexMutation(
+      api.segments.updateSegmentText,
+    );
+    const deleteSegmentMutation = useConvexMutation(api.segments.deleteSegment);
 
-  useEffect(() => {
-    setText(segment.text);
-  }, [segment.text]);
+    const { mutate: debouncedUpdateText } = useTanstackMutation({
+      mutationFn: async (newText: string) => {
+        await updateTextMutation({
+          segmentId: segment._id,
+          text: newText,
+        });
+      },
+    });
 
-  useEffect(() => {
-    if (text === segment.text) {
-      return;
-    }
-    const handler = setTimeout(() => {
-      updateTextMutation({
-        segmentId: segment._id,
-        text,
+    const { mutate: deleteSegment, isPending: isDeleting } =
+      useTanstackMutation({
+        mutationFn: async () => {
+          await deleteSegmentMutation({ segmentId: segment._id });
+        },
+        onSuccess: () => {
+          toast.success("场景已成功删除。");
+          setIsDeleteDialogOpen(false);
+        },
+        onError: (error) => {
+          toast.error("删除失败。", {
+            description: error instanceof Error ? error.message : "未知错误",
+          });
+        },
       });
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [text, segment._id, segment.text, updateTextMutation]);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsDropdownOpen(false);
+    useEffect(() => {
+      setText(segment.text);
+    }, [segment.text]);
+
+    useEffect(() => {
+      if (text === segment.text) {
+        return;
       }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [dropdownRef]);
+      const handler = setTimeout(() => {
+        debouncedUpdateText(text);
+      }, 500);
+      return () => clearTimeout(handler);
+    }, [text, segment.text, debouncedUpdateText]);
 
-  return (
-    <div className="w-full max-w-sm overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <div className="flex items-center justify-between px-4 pb-2 pt-3">
-        <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-          {`场景 ${segment.order + 1}`}
-        </span>
-        <div className="relative" ref={dropdownRef}>
-          <button
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          >
-            <svg
-              className="w-4 h-4 text-gray-500 dark:text-gray-400"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="currentColor"
-              viewBox="0 0 16 3"
-            >
-              <path d="M2 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm6.041 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM14 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z" />
-            </svg>
-          </button>
-          {isDropdownOpen && (
-            <div className="absolute right-0 top-full mt-2 z-10 w-44 bg-white rounded-lg shadow-lg dark:bg-gray-700 border border-gray-200 dark:border-gray-600">
-              <ul className="py-2">
-                <li>
-                  <button className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-600">
-                    <svg
-                      className="w-4 h-4 mr-2"
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                    </svg>
-                    编辑
-                  </button>
-                </li>
-                <li>
-                  <button className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-600">
-                    <svg
-                      className="w-4 h-4 mr-2"
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-                      <polyline points="16 6 12 2 8 6" />
-                      <line x1="12" y1="2" x2="12" y2="15" />
-                    </svg>
-                    导出
-                  </button>
-                </li>
-                <li>
-                  <button className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:text-red-500 dark:hover:bg-gray-600">
-                    <svg
-                      className="w-4 h-4 mr-2"
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    </svg>
-                    删除
-                  </button>
-                </li>
-              </ul>
+    useEffect(() => {
+      function handleClickOutside(event: MouseEvent) {
+        if (
+          dropdownRef.current &&
+          !dropdownRef.current.contains(event.target as Node)
+        ) {
+          setIsDropdownOpen(false);
+        }
+      }
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }, [dropdownRef]);
+
+    return (
+      <>
+        <AlertDialog
+          open={isDeleteDialogOpen}
+          onOpenChange={setIsDeleteDialogOpen}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>确定要删除此场景吗?</AlertDialogTitle>
+              <AlertDialogDescription>
+                此操作无法撤销。这会永久删除此场景及其所有图片版本。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deleteSegment()}
+                disabled={isDeleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isDeleting && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                删除
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <div
+          ref={ref}
+          {...props}
+          className="group/card w-full max-w-sm touch-none overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
+        >
+          <div className="flex items-center justify-between px-4 pb-2 pt-3">
+            <div className="flex items-center gap-2">
+              <button
+                {...dragHandleProps}
+                className="cursor-grab p-1 opacity-50 transition-opacity group-hover/card:opacity-100"
+              >
+                <GripVertical className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+              </button>
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                {`场景 ${segment.order + 1}`}
+              </span>
             </div>
-          )}
-        </div>
-      </div>
-
-      <Link
-        to="/stories/$storyId/segments/$segmentId"
-        params={{ storyId: segment.storyId, segmentId: segment._id }}
-        className="block aspect-video w-full cursor-pointer bg-gray-100 transition-opacity hover:opacity-80 dark:bg-gray-700"
-      >
-        {segment.isGenerating ? (
-          <div className="flex h-full w-full items-center justify-center text-gray-400">
-            图片生成中...
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="rounded-full p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <MoreHorizontal className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+              </button>
+              {isDropdownOpen && (
+                <div className="absolute right-0 top-full z-10 mt-2 w-44 rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-600 dark:bg-gray-700">
+                  <ul className="py-2">
+                    <li>
+                      <button
+                        onClick={() => {
+                          setIsDropdownOpen(false);
+                          setIsDeleteDialogOpen(true);
+                        }}
+                        className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:text-red-500 dark:hover:bg-gray-600"
+                      >
+                        删除
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
-        ) : previewImageUrl ? (
-          <img
-            src={previewImageUrl}
-            alt={`场景 ${segment.order + 1}`}
-            className="h-full w-full object-contain"
+
+          <Link
+            to="/stories/$storyId/segments/$segmentId"
+            params={{ storyId: segment.storyId, segmentId: segment._id }}
+            className="block aspect-video w-full cursor-pointer bg-gray-100 transition-opacity hover:opacity-80 dark:bg-gray-700"
+          >
+            {segment.isGenerating ? (
+              <div className="flex h-full w-full items-center justify-center text-gray-400">
+                图片生成中...
+              </div>
+            ) : previewImageUrl ? (
+              <img
+                src={previewImageUrl}
+                alt={`场景 ${segment.order + 1}`}
+                className="h-full w-full object-contain"
+              />
+            ) : segment.error ? (
+              <div className="flex h-full w-full items-center justify-center p-2 text-center text-xs text-red-500">
+                生成失败: {segment.error}
+              </div>
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-gray-400">
+                暂无图片
+              </div>
+            )}
+          </Link>
+
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={4}
+            className="block w-full resize-none border-0 bg-gray-50 p-2.5 text-sm text-gray-900 focus:ring-0 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+            placeholder="请输入场景描述..."
           />
-        ) : segment.error ? (
-          <div className="flex h-full w-full items-center justify-center p-2 text-center text-xs text-red-500">
-            生成失败: {segment.error}
-          </div>
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-gray-400">
-            暂无图片
-          </div>
-        )}
-      </Link>
-
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={4}
-        className="block w-full resize-none border-0 bg-gray-50 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
-        placeholder="请输入场景描述..."
-      />
-    </div>
-  );
-}
+        </div>
+      </>
+    );
+  },
+);

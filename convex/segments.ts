@@ -4,6 +4,8 @@ import {
   internalQuery,
   mutation,
   query,
+  MutationCtx,
+  QueryCtx,
 } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -12,8 +14,31 @@ import OpenAI from "openai";
 import { Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { consumeCreditsHelper } from "./credits";
+import { ConvexError } from "convex/values";
 
 const openai = new OpenAI();
+
+async function verifySegmentOwnerHelper(
+  ctx: MutationCtx | QueryCtx,
+  segmentId: Id<"segments">,
+) {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) {
+    throw new ConvexError("User not authenticated.");
+  }
+  const segment = await ctx.db.get(segmentId);
+  if (!segment) {
+    throw new ConvexError("Segment not found.");
+  }
+  const story = await ctx.db.get(segment.storyId);
+  if (!story) {
+    throw new ConvexError("Associated story not found.");
+  }
+  if (story.userId !== userId) {
+    throw new ConvexError("User is not the owner of this segment.");
+  }
+  return { segment, story, userId };
+}
 
 function getSystemPrompt(context?: string) {
   const defaultStyle = "A vibrant, cinematic anime style.";
@@ -66,25 +91,7 @@ export const updateSegmentText = mutation({
     text: v.string(),
   },
   async handler(ctx, args) {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("User not authenticated.");
-    }
-
-    const segment = await ctx.db.get(args.segmentId);
-    if (!segment) {
-      throw new Error("Segment not found.");
-    }
-
-    const story = await ctx.db.get(segment.storyId);
-    if (!story) {
-      throw new Error("Associated story not found.");
-    }
-
-    if (story.userId !== userId) {
-      throw new Error("User is not authorized to edit this segment.");
-    }
-
+    await verifySegmentOwnerHelper(ctx, args.segmentId);
     await ctx.db.patch(args.segmentId, { text: args.text });
   },
 });
@@ -95,19 +102,7 @@ export const regenerateImage = mutation({
     prompt: v.string(),
   },
   async handler(ctx, args) {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("User not authenticated.");
-
-    const segment = await ctx.db.get(args.segmentId);
-    if (!segment) throw new Error("Segment not found.");
-
-    const story = await ctx.db.get(segment.storyId);
-    if (!story) throw new Error("Associated story not found.");
-
-    if (story.userId !== userId) {
-      throw new Error("User is not authorized to regenerate this image.");
-    }
-
+    const { userId } = await verifySegmentOwnerHelper(ctx, args.segmentId);
     await consumeCreditsHelper(ctx, userId, CREDIT_COSTS.IMAGE_GENERATION);
 
     await ctx.db.patch(args.segmentId, {
@@ -133,18 +128,7 @@ export const editImage = mutation({
     versionIdToEdit: v.id("imageVersions"),
   },
   async handler(ctx, args) {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("User not authenticated.");
-
-    const segment = await ctx.db.get(args.segmentId);
-    if (!segment) throw new Error("Segment not found.");
-
-    const story = await ctx.db.get(segment.storyId);
-    if (!story) throw new Error("Associated story not found.");
-
-    if (story.userId !== userId) {
-      throw new Error("User is not authorized to edit this image.");
-    }
+    const { userId } = await verifySegmentOwnerHelper(ctx, args.segmentId);
 
     const versionToEdit = await ctx.db.get(args.versionIdToEdit);
     if (!versionToEdit || versionToEdit.segmentId !== args.segmentId) {
@@ -274,6 +258,100 @@ export const get = query({
       : null;
 
     return { ...segment, selectedVersion };
+  },
+});
+
+export const deleteSegment = mutation({
+  args: { segmentId: v.id("segments") },
+  handler: async (ctx, { segmentId }) => {
+    const { segment: segmentToDelete } = await verifySegmentOwnerHelper(
+      ctx,
+      segmentId,
+    );
+
+    const imageVersions = await ctx.db
+      .query("imageVersions")
+      .withIndex("by_segment", (q) => q.eq("segmentId", segmentId))
+      .collect();
+
+    for (const version of imageVersions) {
+      if (version.image) await ctx.storage.delete(version.image);
+      if (version.previewImage) await ctx.storage.delete(version.previewImage);
+      await ctx.db.delete(version._id);
+    }
+
+    await ctx.db.delete(segmentId);
+
+    const subsequentSegments = await ctx.db
+      .query("segments")
+      .withIndex("by_story_order", (q) =>
+        q.eq("storyId", segmentToDelete.storyId),
+      )
+      .filter((q) => q.gt(q.field("order"), segmentToDelete.order))
+      .order("asc")
+      .collect();
+
+    for (const segment of subsequentSegments) {
+      await ctx.db.patch(segment._id, { order: segment.order - 1 });
+    }
+  },
+});
+
+export const reorderSegments = mutation({
+  args: {
+    storyId: v.id("story"),
+    segmentIds: v.array(v.id("segments")),
+  },
+  handler: async (ctx, { storyId, segmentIds }) => {
+    const identity = await getAuthUserId(ctx);
+    if (!identity) throw new Error("User not authenticated");
+
+    const story = await ctx.db.get(storyId);
+    if (!story || story.userId !== identity) {
+      throw new Error("User not authorized");
+    }
+
+    // To ensure atomicity and prevent race conditions,
+    // we perform all database writes sequentially without any `await` inside the loop.
+    const updatePromises = segmentIds.map((segmentId, index) =>
+      ctx.db.patch(segmentId, { order: index }),
+    );
+
+    // We await all the promises at the end.
+    // If any patch fails, Convex will automatically roll back the entire transaction.
+    await Promise.all(updatePromises);
+  },
+});
+
+export const addSegment = mutation({
+  args: { storyId: v.id("story") },
+  handler: async (ctx, { storyId }) => {
+    const identity = await getAuthUserId(ctx);
+    if (!identity) throw new Error("User not authenticated");
+
+    const story = await ctx.db.get(storyId);
+    if (!story || story.userId !== identity) {
+      throw new Error("User not authorized");
+    }
+
+    // Find the current highest order
+    const lastSegment = await ctx.db
+      .query("segments")
+      .withIndex("by_story_order", (q) => q.eq("storyId", storyId))
+      .order("desc")
+      .first();
+
+    const newOrder = lastSegment ? lastSegment.order + 1 : 0;
+
+    // Insert the new segment at the end
+    const newSegmentId = await ctx.db.insert("segments", {
+      storyId,
+      order: newOrder,
+      text: "新场景...",
+      isGenerating: false,
+    });
+
+    return newSegmentId;
   },
 });
 

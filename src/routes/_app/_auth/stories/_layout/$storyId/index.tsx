@@ -1,11 +1,37 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { SegmentCard } from "../../-components/segment-card";
 import { useQuery } from "convex/react";
+import { useConvexMutation } from "@convex-dev/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { api } from "~/convex/_generated/api";
 import { Doc, Id } from "~/convex/_generated/dataModel";
 import { Spinner } from "@/ui/spinner";
 import { Button } from "@/ui/button";
-import { ArrowLeft, Edit, Settings, Clapperboard } from "lucide-react";
+import {
+  ArrowLeft,
+  Edit,
+  Settings,
+  Clapperboard,
+  Plus,
+  Loader2,
+} from "lucide-react";
+import React, { useEffect, useState } from "react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/_auth/stories/_layout/$storyId/")({
   component: Story,
@@ -20,7 +46,7 @@ export default function Story() {
   if (story === undefined) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-gray-500 dark:text-gray-400">加载中...</div>
+        <Spinner />
       </div>
     );
   }
@@ -42,6 +68,37 @@ export default function Story() {
   );
 }
 
+function SortableSegmentItem({
+  segment,
+}: {
+  segment: Doc<"segments"> & { selectedVersion: Doc<"imageVersions"> | null };
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: segment._id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <SegmentCard
+      ref={setNodeRef}
+      style={style}
+      segment={segment}
+      dragHandleProps={{ ...attributes, ...listeners }}
+      className={isDragging ? "shadow-2xl ring-2 ring-blue-500" : ""}
+    />
+  );
+}
+
 function StorySection({ story }: { story: Doc<"story"> }) {
   return (
     <div className="space-y-6">
@@ -52,7 +109,7 @@ function StorySection({ story }: { story: Doc<"story"> }) {
             返回我的故事集
           </Link>
         </Button>
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b pb-4">
+        <div className="flex flex-col items-start justify-between gap-4 border-b pb-4 md:flex-row md:items-center">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
               {story.title}
@@ -99,12 +156,73 @@ function StorySection({ story }: { story: Doc<"story"> }) {
 }
 
 function StorySegments({ story }: { story: Doc<"story"> }) {
-  const { _id: storyId, generationStatus } = story;
+  const { _id: storyId } = story;
   const segments = useQuery(api.segments.getByStory, { storyId });
+  const reorderMutation = useConvexMutation(api.segments.reorderSegments);
+  const addSegmentMutation = useConvexMutation(api.segments.addSegment);
+
+  const [activeSegments, setActiveSegments] = useState<typeof segments>([]);
+
+  useEffect(() => {
+    if (segments) {
+      setActiveSegments(segments);
+    }
+  }, [segments]);
+
+  const { mutate: reorderSegments } = useMutation({
+    mutationFn: async (orderedIds: Id<"segments">[]) => {
+      await reorderMutation({ storyId, segmentIds: orderedIds });
+    },
+    onSuccess: () => {
+      toast.success("场景顺序已保存。");
+    },
+    onError: (err) => {
+      toast.error("保存顺序失败", {
+        description: err instanceof Error ? err.message : "未知错误",
+      });
+      if (segments) setActiveSegments(segments);
+    },
+  });
+
+  const { mutate: addSegment, isPending: isAdding } = useMutation({
+    mutationFn: async () => {
+      await addSegmentMutation({ storyId });
+    },
+    onSuccess: () => {
+      toast.success("新场景已添加到末尾。");
+    },
+    onError: (err) => {
+      toast.error("添加场景失败。", {
+        description: err instanceof Error ? err.message : "未知错误",
+      });
+    },
+  });
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setActiveSegments((items) => {
+        if (!items) return [];
+        const oldIndex = items.findIndex((item) => item._id === active.id);
+        const newIndex = items.findIndex((item) => item._id === over.id);
+        const newOrder = arrayMove(items, oldIndex, newIndex);
+        reorderSegments(newOrder.map((item) => item._id));
+        return newOrder;
+      });
+    }
+  }
 
   if (segments === undefined) {
     return (
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
         {[...Array(3)].map((_, i) => (
           <div
             key={i}
@@ -116,55 +234,59 @@ function StorySegments({ story }: { story: Doc<"story"> }) {
   }
 
   if (segments.length === 0) {
-    if (generationStatus === "processing") {
-      return (
-        <div className="flex h-32 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
-          <div className="text-center text-gray-500 dark:text-gray-400">
-            <p>正在为您拆分剧本并生成场景...</p>
-          </div>
-        </div>
-      );
-    }
-
-    if (generationStatus === "completed") {
-      return (
-        <div className="flex h-32 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
-          <div className="text-center text-gray-500 dark:text-gray-400">
-            <p>故事为空或无法拆分场景。</p>
-            <Link
-              to="/stories/$storyId/refine"
-              params={{ storyId }}
-              className="mt-1 inline-block text-blue-500 hover:underline"
-            >
-              前往编辑器完善您的故事
-            </Link>
-          </div>
-        </div>
-      );
-    }
-
     return (
-      <div className="flex h-32 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
-        <div className="text-gray-500 dark:text-gray-400">
-          这个故事还没有生成任何场景
-        </div>
+      <div className="flex h-48 flex-col items-center justify-center space-y-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
+        <p className="text-center text-gray-500 dark:text-gray-400">
+          这个故事还没有任何场景
+        </p>
+        <Button onClick={() => addSegment()} disabled={isAdding}>
+          {isAdding ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="mr-2 h-4 w-4" />
+          )}
+          添加第一个场景
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          共 {segments.length} 个场景
-        </p>
-        {/* Future: Add sorting and "Add Scene" button here */}
-      </div>
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-        {segments.map((segment) => (
-          <SegmentCard key={segment._id} segment={segment} />
-        ))}
-      </div>
-    </div>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext
+        items={activeSegments?.map((s) => s._id) ?? []}
+        strategy={rectSortingStrategy}
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              共 {segments.length} 个场景
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => addSegment()}
+              disabled={isAdding}
+            >
+              {isAdding ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="mr-2 h-4 w-4" />
+              )}
+              添加新场景
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
+            {activeSegments?.map((segment) => (
+              <SortableSegmentItem key={segment._id} segment={segment} />
+            ))}
+          </div>
+        </div>
+      </SortableContext>
+    </DndContext>
   );
 }

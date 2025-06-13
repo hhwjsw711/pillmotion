@@ -13,9 +13,21 @@ import {
   FileText,
   Loader2,
   PlusCircle,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/utils/misc";
 import { toast } from "sonner";
+import React from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/ui/alert-dialog";
 
 export const Route = createFileRoute("/_app/_auth/stories/_layout/")({
   component: StoriesPage,
@@ -94,30 +106,100 @@ function StoryThumbnail({ storyId }: { storyId: Id<"story"> }) {
 
 // The main card component for a single story
 function StoryCard({ story }: { story: Doc<"story"> }) {
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
+
+  const deleteStoryMutation = useConvexMutation(api.story.deleteStory);
+
+  const { mutate: deleteStory, isPending: isDeleting } = useMutation({
+    mutationFn: async () => {
+      await deleteStoryMutation({ storyId: story._id });
+    },
+    onSuccess: () => {
+      toast.success("故事已成功删除。");
+      setIsDeleteDialogOpen(false);
+    },
+    onError: (error) => {
+      toast.error("删除故事失败。", {
+        description:
+          error instanceof Error ? error.message : "An unknown error occurred",
+      });
+    },
+  });
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    deleteStory();
+  };
+
   return (
-    <Link
-      to="/stories/$storyId"
-      params={{ storyId: story._id }}
-      className="group"
-    >
-      <div className="overflow-hidden rounded-lg border bg-card shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-1">
-        <StoryThumbnail storyId={story._id} />
-        <div className="p-4">
-          <div className="flex items-start justify-between">
-            <h3 className="mb-1 font-semibold leading-tight line-clamp-2">
-              {story.title}
-            </h3>
-            <StatusBadge status={story.generationStatus} />
-          </div>
-          <div className="mt-2 flex items-center text-xs text-muted-foreground">
-            <Clock className="mr-1.5 h-3 w-3" />
-            <span>
-              最后更新: {new Date(story.updatedAt).toLocaleDateString()}
-            </span>
+    <div className="group relative">
+      <Link
+        to="/stories/$storyId"
+        params={{ storyId: story._id }}
+        className="block transition-all duration-300 hover:shadow-md hover:-translate-y-1"
+        onClick={(e) => {
+          if (isDeleteDialogOpen) {
+            e.preventDefault();
+          }
+        }}
+      >
+        <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
+          <StoryThumbnail storyId={story._id} />
+          <div className="p-4">
+            <div className="flex items-start justify-between">
+              <h3 className="mb-1 font-semibold leading-tight line-clamp-2">
+                {story.title}
+              </h3>
+              <StatusBadge status={story.generationStatus} />
+            </div>
+            <div className="mt-2 flex items-center text-xs text-muted-foreground">
+              <Clock className="mr-1.5 h-3 w-3" />
+              <span>
+                最后更新: {new Date(story.updatedAt).toLocaleDateString()}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
-    </Link>
+      </Link>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <Button
+          variant="destructive"
+          size="icon"
+          className="absolute top-2 right-2 z-10 hidden h-8 w-8 group-hover:flex"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDeleteDialogOpen(true);
+          }}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+        <AlertDialogContent
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>您确定要删除这个故事吗?</AlertDialogTitle>
+            <AlertDialogDescription>
+              此操作无法撤销。这会永久删除您的故事、所有分镜以及生成的图片。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 
