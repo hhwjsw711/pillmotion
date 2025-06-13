@@ -28,6 +28,7 @@ import type * as segments from "../segments.js";
 import type * as story from "../story.js";
 import type * as streaming from "../streaming.js";
 import type * as stripe from "../stripe.js";
+import type * as transitions from "../transitions.js";
 
 import type {
   ApiFromModules,
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   story: typeof story;
   streaming: typeof streaming;
   stripe: typeof stripe;
+  transitions: typeof transitions;
 }>;
 declare const fullApiWithMounts: typeof fullApi;
 

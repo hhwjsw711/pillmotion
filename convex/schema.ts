@@ -45,6 +45,34 @@ export const planKeyValidator = v.union(
 );
 export type PlanKey = Infer<typeof planKeyValidator>;
 
+export const AVAILABLE_AITTS_VOICES = [
+  "alloy",
+  "echo",
+  "fable",
+  "onyx",
+  "nova",
+  "shimmer",
+] as const;
+export const aittsVoicesValidator = v.union(
+  ...AVAILABLE_AITTS_VOICES.map((voice) => v.literal(voice)),
+);
+export type AITTSVoice = Infer<typeof aittsVoicesValidator>;
+
+export const IMAGE_VERSION_SOURCES = [
+  "ai_generated",
+  "user_uploaded",
+  "ai_edited",
+] as const;
+export const imageVersionSourceValidator = v.union(
+  ...IMAGE_VERSION_SOURCES.map((s) => v.literal(s)),
+);
+export type ImageVersionSource = Infer<typeof imageVersionSourceValidator>;
+
+export const TRANSITION_TYPES = ["cut", "fade", "dissolve", "wipe"] as const;
+export const transitionTypeValidator = v.union(
+  ...TRANSITION_TYPES.map((t) => v.literal(t)),
+);
+
 export const storyStatusValidator = v.union(
   v.literal("draft"),
   v.literal("unpublished"),
@@ -149,6 +177,21 @@ const schema = defineSchema({
     isGenerating: v.boolean(),
     selectedVersionId: v.optional(v.id("imageVersions")),
     error: v.optional(v.string()),
+    isAnalyzingText: v.optional(v.boolean()),
+    structuredText: v.optional(
+      v.array(
+        v.object({
+          lineId: v.string(),
+          type: v.union(v.literal("narration"), v.literal("dialogue")),
+          characterName: v.optional(v.string()),
+          text: v.string(),
+          voice: v.optional(aittsVoicesValidator),
+          voiceoverStorageId: v.optional(v.id("_storage")),
+          isGeneratingVoiceover: v.optional(v.boolean()),
+          voiceoverError: v.optional(v.string()),
+        }),
+      ),
+    ),
   })
     .index("by_story", ["storyId"])
     .index("by_story_order", ["storyId", "order"]),
@@ -158,12 +201,16 @@ const schema = defineSchema({
     prompt: v.optional(v.string()),
     image: v.id("_storage"),
     previewImage: v.id("_storage"),
-    source: v.union(
-      v.literal("ai_generated"),
-      v.literal("user_uploaded"),
-      v.literal("ai_edited"),
-    ),
+    source: imageVersionSourceValidator,
   }).index("by_segment", ["segmentId"]),
+  transitions: defineTable({
+    storyId: v.id("story"),
+    afterSegmentId: v.id("segments"),
+    type: transitionTypeValidator,
+    duration: v.number(),
+  })
+    .index("by_story", ["storyId"])
+    .index("by_afterSegment", ["afterSegmentId"]),
   userMessages: defineTable({
     userId: v.id("users"),
     prompt: v.string(),

@@ -421,3 +421,61 @@ export const getStoryInternal = internalQuery({
     return await ctx.db.get(args.storyId);
   },
 });
+
+export const scheduleContextRegeneration = mutation({
+  args: {
+    storyId: v.id("story"),
+  },
+  handler: async (ctx, args) => {
+    const { storyId } = args;
+    const { userId } = await verifyStoryOwnerHelper(ctx, storyId);
+
+    // Consume credits for the AI call
+    await consumeCreditsHelper(ctx, userId, CREDIT_COSTS.CHAT_COMPLETION);
+
+    // Schedule the internal action to do the work
+    await ctx.scheduler.runAfter(0, internal.story.regenerateContextAction, {
+      storyId,
+    });
+  },
+});
+
+export const regenerateContextAction = internalAction({
+  args: {
+    storyId: v.id("story"),
+  },
+  handler: async (ctx, args) => {
+    const { storyId } = args;
+
+    // We use an internal query to bypass owner verification since this is a trusted internal action
+    const story = await ctx.runQuery(internal.story.getStoryInternal, {
+      storyId,
+    });
+
+    if (!story) {
+      console.error(`Story not found in regenerateContextAction: ${storyId}`);
+      return;
+    }
+
+    if (!story.script || story.script.trim() === "") {
+      // If the script is empty, we still update the context to reflect this,
+      // so the frontend doesn't get stuck in a loading state.
+      await ctx.runMutation(internal.story.updateStoryContextInternal, {
+        storyId,
+        context: JSON.stringify({
+          error: "Script is empty, cannot generate context.",
+        }),
+      });
+      return;
+    }
+
+    // Reuse the existing helper function!
+    const context = await generateContext(story.script);
+
+    // Save the new context back to the database
+    await ctx.runMutation(internal.story.updateStoryContextInternal, {
+      storyId,
+      context,
+    });
+  },
+});

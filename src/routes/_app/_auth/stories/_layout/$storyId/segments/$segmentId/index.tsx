@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Bot,
   Info,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
@@ -26,12 +27,20 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/ui/tooltip";
+import { ImageVersionSource } from "~/convex/schema";
+import { DialogueEditor } from "../../../../-components/dialogue-editor";
 
 export const Route = createFileRoute(
   "/_app/_auth/stories/_layout/$storyId/segments/$segmentId/",
 )({
   component: SegmentEditor,
 });
+
+const sourceDisplayName: Record<ImageVersionSource, string> = {
+  ai_generated: "AI 生成",
+  ai_edited: "AI 编辑",
+  user_uploaded: "用户上传",
+};
 
 function VersionCard({
   version,
@@ -45,7 +54,7 @@ function VersionCard({
   isSelecting: boolean;
 }) {
   const thumbnailUrl = useQuery(
-    api.files.getUrl,
+    api.files.getFileUrl,
     version.previewImage ? { storageId: version.previewImage } : "skip",
   );
 
@@ -71,12 +80,7 @@ function VersionCard({
         </p>
       )}
       <p className="text-xs text-muted-foreground">
-        来源:{" "}
-        {version.source === "ai_generated"
-          ? "AI 生成"
-          : version.source === "ai_edited"
-            ? "AI 编辑"
-            : "用户上传"}
+        来源: {sourceDisplayName[version.source]}
       </p>
       <Button
         variant={isSelected ? "default" : "secondary"}
@@ -107,7 +111,7 @@ export default function SegmentEditor() {
 
   const selectedVersion = segment?.selectedVersion;
   const imageUrl = useQuery(
-    api.files.getUrl,
+    api.files.getFileUrl,
     selectedVersion?.image ? { storageId: selectedVersion.image } : "skip",
   );
 
@@ -231,8 +235,12 @@ export default function SegmentEditor() {
                   </div>
                 )}
               </div>
-              <Tabs defaultValue="edit" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
+              <Tabs defaultValue="script" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="script">
+                    <FileText className="mr-2 h-4 w-4" />
+                    剧本 & 配音
+                  </TabsTrigger>
                   <TabsTrigger value="edit">
                     <Bot className="mr-2 h-4 w-4" />
                     聊天编辑
@@ -242,6 +250,11 @@ export default function SegmentEditor() {
                     生成新图
                   </TabsTrigger>
                 </TabsList>
+                <TabsContent value="script">
+                  <div className="overflow-hidden rounded-b-lg border border-t-0 bg-background">
+                    <DialogueEditor segment={segment} />
+                  </div>
+                </TabsContent>
                 <TabsContent value="edit">
                   <div className="space-y-4 rounded-b-lg border border-t-0 bg-background p-4">
                     <div className="flex justify-between items-center">

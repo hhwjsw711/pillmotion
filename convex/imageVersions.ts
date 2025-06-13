@@ -9,6 +9,7 @@ import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
 import { Jimp } from "jimp";
+import { imageVersionSourceValidator } from "./schema";
 
 const SCALED_IMAGE_WIDTH = 468;
 const SCALED_IMAGE_HEIGHT = 850;
@@ -46,11 +47,7 @@ export const createAndSelectVersion = internalMutation({
     prompt: v.optional(v.string()),
     image: v.id("_storage"),
     previewImage: v.id("_storage"),
-    source: v.union(
-      v.literal("ai_generated"),
-      v.literal("user_uploaded"),
-      v.literal("ai_edited"),
-    ),
+    source: imageVersionSourceValidator,
   },
   async handler(ctx, args) {
     const { segmentId, ...versionArgs } = args;

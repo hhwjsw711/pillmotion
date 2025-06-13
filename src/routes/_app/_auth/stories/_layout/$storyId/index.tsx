@@ -15,7 +15,7 @@ import {
   Plus,
   Loader2,
 } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -32,6 +32,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
+import { useMemo } from "react";
+import { TransitionEditor } from "../../-components/transition-editor";
 
 export const Route = createFileRoute("/_app/_auth/stories/_layout/$storyId/")({
   component: Story,
@@ -70,32 +72,48 @@ export default function Story() {
 
 function SortableSegmentItem({
   segment,
+  transition,
+  isLast,
+  storyId,
 }: {
   segment: Doc<"segments"> & { selectedVersion: Doc<"imageVersions"> | null };
+  transition?: Doc<"transitions">;
+  isLast: boolean;
+  storyId: Id<"story">;
 }) {
   const {
     attributes,
     listeners,
     setNodeRef,
     transform,
-    transition,
+    transition: dndTransition,
     isDragging,
   } = useSortable({ id: segment._id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: dndTransition,
     zIndex: isDragging ? 10 : undefined,
   };
 
   return (
-    <SegmentCard
-      ref={setNodeRef}
-      style={style}
-      segment={segment}
-      dragHandleProps={{ ...attributes, ...listeners }}
-      className={isDragging ? "shadow-2xl ring-2 ring-blue-500" : ""}
-    />
+    <div ref={setNodeRef} style={style}>
+      <SegmentCard
+        segment={segment}
+        dragHandleProps={{ ...attributes, ...listeners }}
+        className={isDragging ? "shadow-2xl ring-2 ring-blue-500" : ""}
+      />
+      {!isLast && (
+        <div className="px-4">
+          <TransitionEditor
+            storyId={storyId}
+            afterSegmentId={segment._id}
+            order={segment.order}
+            transition={transition}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -158,10 +176,16 @@ function StorySection({ story }: { story: Doc<"story"> }) {
 function StorySegments({ story }: { story: Doc<"story"> }) {
   const { _id: storyId } = story;
   const segments = useQuery(api.segments.getByStory, { storyId });
+  const transitions = useQuery(api.transitions.getForStory, { storyId });
   const reorderMutation = useConvexMutation(api.segments.reorderSegments);
   const addSegmentMutation = useConvexMutation(api.segments.addSegment);
 
   const [activeSegments, setActiveSegments] = useState<typeof segments>([]);
+
+  const transitionsByAfterSegmentId = useMemo(() => {
+    if (!transitions) return new Map();
+    return new Map(transitions.map((t) => [t.afterSegmentId, t]));
+  }, [transitions]);
 
   useEffect(() => {
     if (segments) {
@@ -280,9 +304,15 @@ function StorySegments({ story }: { story: Doc<"story"> }) {
               添加新场景
             </Button>
           </div>
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-            {activeSegments?.map((segment) => (
-              <SortableSegmentItem key={segment._id} segment={segment} />
+          <div className="grid grid-cols-1 gap-y-4 md:grid-cols-2 md:gap-x-8 lg:grid-cols-3">
+            {activeSegments?.map((segment, index) => (
+              <SortableSegmentItem
+                key={segment._id}
+                segment={segment}
+                transition={transitionsByAfterSegmentId.get(segment._id)}
+                isLast={index === activeSegments.length - 1}
+                storyId={storyId}
+              />
             ))}
           </div>
         </div>

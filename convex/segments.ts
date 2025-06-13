@@ -9,12 +9,201 @@ import {
 } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { CREDIT_COSTS } from "./schema";
+import { aittsVoicesValidator, CREDIT_COSTS } from "./schema";
 import OpenAI from "openai";
 import { Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { consumeCreditsHelper } from "./credits";
 import { ConvexError } from "convex/values";
+
+export const updateStructuredText = mutation({
+  args: {
+    segmentId: v.id("segments"),
+    structuredText: v.array(
+      v.object({
+        lineId: v.string(),
+        type: v.union(v.literal("narration"), v.literal("dialogue")),
+        characterName: v.optional(v.string()),
+        text: v.string(),
+        voice: v.optional(aittsVoicesValidator),
+        voiceoverStorageId: v.optional(v.id("_storage")),
+        isGeneratingVoiceover: v.optional(v.boolean()),
+        voiceoverError: v.optional(v.string()),
+      }),
+    ),
+  },
+  handler: async (ctx, { segmentId, structuredText }) => {
+    await verifySegmentOwnerHelper(ctx, segmentId);
+    await ctx.db.patch(segmentId, { structuredText });
+  },
+});
+
+export const scheduleGenerateSingleLineVoiceover = mutation({
+  args: {
+    segmentId: v.id("segments"),
+    lineId: v.string(),
+  },
+  handler: async (ctx, { segmentId, lineId }) => {
+    const { segment, userId } = await verifySegmentOwnerHelper(ctx, segmentId);
+
+    if (!segment.structuredText) {
+      throw new ConvexError("Segment has no structured text.");
+    }
+    const lineIndex = segment.structuredText.findIndex(
+      (l) => l.lineId === lineId,
+    );
+    if (lineIndex === -1) {
+      throw new ConvexError("Line not found.");
+    }
+
+    const line = segment.structuredText[lineIndex];
+    const lineText = line.text;
+    const voice = line.voice ?? "alloy";
+
+    if (!lineText.trim()) {
+      throw new ConvexError("Cannot generate voiceover for empty text.");
+    }
+
+    await consumeCreditsHelper(ctx, userId, CREDIT_COSTS.CHAT_COMPLETION);
+
+    const newStructuredText = [...segment.structuredText];
+    newStructuredText[lineIndex] = {
+      ...newStructuredText[lineIndex],
+      isGeneratingVoiceover: true,
+      voiceoverError: undefined,
+    };
+    await ctx.db.patch(segmentId, { structuredText: newStructuredText });
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.segments.generateSingleLineVoiceover,
+      {
+        segmentId,
+        lineId,
+        lineText,
+        voice,
+      },
+    );
+  },
+});
+
+export const generateSingleLineVoiceover = internalAction({
+  args: {
+    segmentId: v.id("segments"),
+    lineId: v.string(),
+    lineText: v.string(),
+    voice: aittsVoicesValidator,
+  },
+  handler: async (ctx, { segmentId, lineId, lineText, voice }) => {
+    try {
+      const speech = await openai.audio.speech.create({
+        model: "tts-1",
+        voice: voice,
+        input: lineText,
+      });
+
+      const buffer = await speech.arrayBuffer();
+      const storageId = await ctx.storage.store(new Blob([buffer]));
+
+      await ctx.runMutation(
+        internal.segments.updateSingleLineVoiceoverSuccess,
+        {
+          segmentId,
+          lineId,
+          storageId,
+        },
+      );
+    } catch (error: any) {
+      console.error("Failed to generate voiceover:", error);
+      await ctx.runMutation(internal.segments.updateSingleLineVoiceoverError, {
+        segmentId,
+        lineId,
+        error: error.message || "Unknown error",
+      });
+    }
+  },
+});
+
+export const updateSingleLineVoiceoverSuccess = internalMutation({
+  args: {
+    segmentId: v.id("segments"),
+    lineId: v.string(),
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, { segmentId, lineId, storageId }) => {
+    const segment = await ctx.db.get(segmentId);
+    if (!segment || !segment.structuredText) return;
+    const lineIndex = segment.structuredText.findIndex(
+      (l) => l.lineId === lineId,
+    );
+    if (lineIndex === -1) return;
+
+    const newStructuredText = [...segment.structuredText];
+    newStructuredText[lineIndex] = {
+      ...newStructuredText[lineIndex],
+      voiceoverStorageId: storageId,
+      isGeneratingVoiceover: false,
+      voiceoverError: undefined,
+    };
+    await ctx.db.patch(segmentId, { structuredText: newStructuredText });
+  },
+});
+
+export const updateSingleLineVoiceoverError = internalMutation({
+  args: {
+    segmentId: v.id("segments"),
+    lineId: v.string(),
+    error: v.string(),
+  },
+  handler: async (ctx, { segmentId, lineId, error }) => {
+    const segment = await ctx.db.get(segmentId);
+    if (!segment || !segment.structuredText) return;
+    const lineIndex = segment.structuredText.findIndex(
+      (l) => l.lineId === lineId,
+    );
+    if (lineIndex === -1) return;
+
+    const newStructuredText = [...segment.structuredText];
+    newStructuredText[lineIndex] = {
+      ...newStructuredText[lineIndex],
+      isGeneratingVoiceover: false,
+      voiceoverError: error,
+      voiceoverStorageId: undefined,
+    };
+    await ctx.db.patch(segmentId, { structuredText: newStructuredText });
+  },
+});
+
+export const deleteSingleLineVoiceover = mutation({
+  args: {
+    segmentId: v.id("segments"),
+    lineId: v.string(),
+  },
+  handler: async (ctx, { segmentId, lineId }) => {
+    await verifySegmentOwnerHelper(ctx, segmentId);
+
+    const segment = await ctx.db.get(segmentId);
+    if (!segment || !segment.structuredText) return;
+
+    const line = segment.structuredText.find((l) => l.lineId === lineId);
+    if (line?.voiceoverStorageId) {
+      await ctx.storage.delete(line.voiceoverStorageId);
+    }
+
+    const newStructuredText = segment.structuredText.map((l) => {
+      if (l.lineId === lineId) {
+        return {
+          ...l,
+          voiceoverStorageId: undefined,
+          voiceoverError: undefined,
+          isGeneratingVoiceover: undefined,
+        };
+      }
+      return l;
+    });
+    await ctx.db.patch(segmentId, { structuredText: newStructuredText });
+  },
+});
 
 const openai = new OpenAI();
 

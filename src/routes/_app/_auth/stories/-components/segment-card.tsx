@@ -30,7 +30,7 @@ interface SegmentCardProps extends React.HTMLAttributes<HTMLDivElement> {
 export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
   ({ segment, dragHandleProps, ...props }, ref) => {
     const previewImageUrl = useQuery(
-      api.files.getUrl,
+      api.files.getFileUrl,
       segment.selectedVersion?.previewImage
         ? { storageId: segment.selectedVersion.previewImage }
         : "skip",

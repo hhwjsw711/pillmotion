@@ -81,7 +81,7 @@ function StoryThumbnail({ storyId }: { storyId: Id<"story"> }) {
   const segments = useQuery(api.segments.getByStory, { storyId });
   const firstSegment = segments?.[0];
   const thumbnailUrl = useQuery(
-    api.files.getUrl,
+    api.files.getFileUrl,
     firstSegment?.selectedVersion?.previewImage
       ? { storageId: firstSegment.selectedVersion.previewImage }
       : "skip",
