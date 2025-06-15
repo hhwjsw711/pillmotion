@@ -17,6 +17,7 @@ import {
 import { Film, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { TRANSITION_TYPES } from "~/convex/schema";
+import { useTranslation } from "react-i18next";
 
 type Transition = Doc<"transitions">;
 
@@ -33,6 +34,7 @@ export function TransitionEditor({
   order,
   transition,
 }: TransitionEditorProps) {
+  const { t } = useTranslation();
   const [type, setType] = useState<Transition["type"]>(
     transition?.type ?? "cut",
   );
@@ -49,11 +51,11 @@ export function TransitionEditor({
         duration: vars.duration,
       }),
     onSuccess: () => {
-      toast.success(`Transition after segment ${order + 1} updated.`);
+      toast.success(t("toastTransitionUpdated", { order: order + 1 }));
       setIsOpen(false);
     },
     onError: (err) =>
-      toast.error("Failed to save transition.", {
+      toast.error(t("toastTransitionUpdateFailed"), {
         description: err.message,
       }),
   });
@@ -73,9 +75,7 @@ export function TransitionEditor({
     }
 
     if (type !== "cut" && duration < 100) {
-      toast.warning(
-        "For a better visual effect, transitions are recommended to be at least 100ms.",
-      );
+      toast.warning(t("toastTransitionDurationWarning"));
     }
     upsert({ type, duration });
   };
@@ -101,14 +101,16 @@ export function TransitionEditor({
         <PopoverContent className="w-80">
           <div className="grid gap-4">
             <div className="space-y-2">
-              <h4 className="font-medium leading-none">Transition Settings</h4>
+              <h4 className="font-medium leading-none">
+                {t("transitionSettingsTitle")}
+              </h4>
               <p className="text-sm text-muted-foreground">
-                Configure the transition after segment {order + 1}.
+                {t("transitionSettingsDescription", { order: order + 1 })}
               </p>
             </div>
             <div className="grid gap-2">
               <div className="grid grid-cols-3 items-center gap-4">
-                <Label htmlFor="type">Type</Label>
+                <Label htmlFor="type">{t("transitionTypeLabel")}</Label>
                 <Select
                   value={type}
                   onValueChange={(value) =>
@@ -116,7 +118,7 @@ export function TransitionEditor({
                   }
                 >
                   <SelectTrigger id="type" className="col-span-2 h-8">
-                    <SelectValue placeholder="Select type" />
+                    <SelectValue placeholder={t("transitionTypePlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
                     {TRANSITION_TYPES.map((t) => (
@@ -128,7 +130,7 @@ export function TransitionEditor({
                 </Select>
               </div>
               <div className="grid grid-cols-3 items-center gap-4">
-                <Label htmlFor="duration">Duration (ms)</Label>
+                <Label htmlFor="duration">{t("transitionDurationLabel")}</Label>
                 <Input
                   id="duration"
                   type="number"
@@ -142,7 +144,7 @@ export function TransitionEditor({
             </div>
             <Button onClick={handleSave} disabled={isPending}>
               {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save
+              {t("save")}
             </Button>
           </div>
         </PopoverContent>

@@ -130,6 +130,10 @@ const schema = defineSchema({
   })
     .index("email", ["email"])
     .index("customerId", ["customerId"]),
+  collections: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+  }).index("by_user", ["userId"]),
   plans: defineTable({
     key: planKeyValidator,
     stripeId: v.string(),
@@ -161,11 +165,13 @@ const schema = defineSchema({
     userId: v.id("users"),
     title: v.string(),
     script: v.string(),
-    status: v.optional(storyStatusValidator),
+    status: storyStatusValidator,
     generationStatus: v.optional(storyGenerationStatusValidator),
     format: v.optional(storyFormatValidator),
     context: v.optional(v.string()),
     generationId: v.optional(v.string()),
+    collectionId: v.optional(v.id("collections")),
+    stylePrompt: v.optional(v.string()),
   })
     .index("userId", ["userId"])
     .index("by_user_status", ["userId", "status"])

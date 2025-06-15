@@ -6,6 +6,7 @@ import { Id } from "~/convex/_generated/dataModel";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export function EditableTitle({
   storyId,
@@ -14,6 +15,7 @@ export function EditableTitle({
   storyId: Id<"story">;
   initialTitle: string;
 }) {
+  const { t } = useTranslation();
   const [isSuccess, setIsSuccess] = useState(false);
   const { mutate, isPending } = useMutation({
     mutationFn: useConvexMutation(api.story.updateStoryTitle),
@@ -23,7 +25,7 @@ export function EditableTitle({
       return () => clearTimeout(timer);
     },
     onError: (err) => {
-      toast.error("标题更新失败", {
+      toast.error(t("toastTitleUpdateFailed"), {
         description: err.message,
       });
     },
@@ -49,7 +51,7 @@ export function EditableTitle({
         }}
         disabled={isPending}
         className="w-full !text-2xl h-auto border-none bg-transparent p-0 font-semibold focus-visible:ring-0"
-        aria-label="故事标题"
+        aria-label={t("ariaLabelStoryTitle")}
       />
       <div className="h-6 w-6">
         {isPending ? (

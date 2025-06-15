@@ -7,6 +7,7 @@ import { useMemo, useEffect } from "react";
 import Markdown from "react-markdown";
 import { useAuthToken } from "@convex-dev/auth/react";
 import { MessageActions } from "./message-actions";
+import { useTranslation } from "react-i18next";
 
 export function ServerMessage({
   message,
@@ -19,6 +20,7 @@ export function ServerMessage({
   stopStreaming: () => void;
   scrollToBottom: () => void;
 }) {
+  const { t } = useTranslation();
   const token = useAuthToken();
 
   const { text, status } = useStream(
@@ -49,11 +51,11 @@ export function ServerMessage({
 
   return (
     <div>
-    <div className="md-answer flex flex-col items-start">
-      <Markdown>{text || "Thinking..."}</Markdown>
-      {status === "error" && (
-        <div className="text-red-500 mt-2">Error loading response</div>
-      )}
+      <div className="md-answer flex flex-col items-start">
+        <Markdown>{text || t("serverMessageThinking")}</Markdown>
+        {status === "error" && (
+          <div className="text-red-500 mt-2">{t("serverMessageError")}</div>
+        )}
       </div>
       <MessageActions text={text} isLoading={isLoading} />
     </div>

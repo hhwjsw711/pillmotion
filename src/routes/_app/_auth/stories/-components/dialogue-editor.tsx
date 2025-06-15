@@ -42,6 +42,7 @@ import {
   SelectValue,
 } from "@/ui/select";
 import { AVAILABLE_AITTS_VOICES } from "~/convex/schema";
+import { useTranslation } from "react-i18next";
 
 type StructuredTextLine = NonNullable<
   Doc<"segments">["structuredText"]
@@ -59,6 +60,7 @@ function LineAudioControls({
   segmentId: Id<"segments">;
   line: StructuredTextLine;
 }) {
+  const { t } = useTranslation();
   const scheduleGeneration = useConvexMutation(
     api.segments.scheduleGenerateSingleLineVoiceover,
   );
@@ -68,9 +70,9 @@ function LineAudioControls({
 
   const { mutate: generate, isPending: isScheduling } = useTanstackMutation({
     mutationFn: () => scheduleGeneration({ segmentId, lineId: line.lineId }),
-    onSuccess: () => toast.info(`语音生成已开始。`),
+    onSuccess: () => toast.info(t("toastVoiceGenerationStarted")),
     onError: (err) =>
-      toast.error("生成失败。", {
+      toast.error(t("toastVoiceGenerationFailed"), {
         description: err.message,
       }),
   });
@@ -78,8 +80,9 @@ function LineAudioControls({
   const { mutate: deleteAudio, isPending: isDeleting } = useTanstackMutation({
     mutationFn: () =>
       deleteVoiceoverMutation({ segmentId, lineId: line.lineId }),
-    onSuccess: () => toast.success("音频已删除。"),
-    onError: (err) => toast.error("删除失败。", { description: err.message }),
+    onSuccess: () => toast.success(t("toastAudioDeleted")),
+    onError: (err) =>
+      toast.error(t("toastAudioDeleteFailed"), { description: err.message }),
   });
 
   const { data: audioUrl } = useQuery(
@@ -123,7 +126,7 @@ function LineAudioControls({
   if (isBusy) {
     return (
       <div className="flex h-10 w-10 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+        <Loader2 className="h-5 w-5 animate-spin text-primary" />
       </div>
     );
   }
@@ -143,7 +146,11 @@ function LineAudioControls({
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Generation failed: {line.voiceoverError}</p>
+            <p>
+              {t("tooltipGenerationFailed", {
+                error: line.voiceoverError,
+              })}
+            </p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -152,7 +159,7 @@ function LineAudioControls({
 
   if (audioUrl && line.voiceoverStorageId) {
     return (
-      <div className="flex h-10 w-10 items-center justify-center rounded-lg border bg-slate-100 dark:bg-slate-800">
+      <div className="flex h-10 w-10 items-center justify-center rounded-lg border bg-accent">
         <audio ref={audioRef} src={audioUrl} preload="metadata" />
         <Button onClick={togglePlayPause} size="icon" variant="ghost">
           {isPlaying ? (
@@ -169,19 +176,19 @@ function LineAudioControls({
               className="h-8 w-6 text-muted-foreground"
             >
               <MoreVertical className="h-4 w-4" />
-            </Button>
+              </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => generate()}>
               <RefreshCcw className="mr-2 h-4 w-4" />
-              <span>重新生成</span>
+              <span>{t("regenerate")}</span>
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => deleteAudio()}
-              className="text-red-600 dark:text-red-500"
+              className="text-destructive focus:text-destructive"
             >
               <Trash2 className="mr-2 h-4 w-4" />
-              <span>删除音频</span>
+              <span>{t("deleteAudio")}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -204,7 +211,7 @@ function LineAudioControls({
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Generate voiceover</p>
+            <p>{t("tooltipGenerateVoiceover")}</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -213,6 +220,7 @@ function LineAudioControls({
 }
 
 export function DialogueEditor({ segment }: DialogueEditorProps) {
+  const { t } = useTranslation();
   const [lines, setLines] = useState<StructuredTextLine[]>(
     segment.structuredText ?? [],
   );
@@ -228,12 +236,12 @@ export function DialogueEditor({ segment }: DialogueEditorProps) {
       });
     },
     onSuccess: () => {
-      toast.success("剧本已保存。");
+      toast.success(t("toastScriptSaved"));
       setIsDirty(false);
     },
     onError: (error) => {
-      toast.error("保存失败。", {
-        description: error instanceof Error ? error.message : "未知错误",
+      toast.error(t("toastScriptSaveFailed"), {
+        description: error instanceof Error ? error.message : t("unknownError"),
       });
     },
   });
@@ -286,14 +294,13 @@ export function DialogueEditor({ segment }: DialogueEditorProps) {
   };
 
   return (
-    <div className="flex h-full flex-col bg-gray-50 p-3 dark:bg-gray-900/50">
+    <div className="flex h-full flex-col p-3 bg-muted/50">
       <div className="flex-grow space-y-3 overflow-y-auto">
-        {/* 7. 添加空状态提示 */}
         {lines.length === 0 && (
           <div className="flex h-full items-center justify-center">
             <div className="text-center text-sm text-muted-foreground">
-              <p>这个剧本还是空的。</p>
-              <p className="mt-1">点击下方的按钮来添加第一行旁白或对话吧！</p>
+              <p>{t("dialogueEditorEmptyScript")}</p>
+              <p className="mt-1">{t("dialogueEditorEmptyScriptHint")}</p>
             </div>
           </div>
         )}
@@ -315,7 +322,7 @@ export function DialogueEditor({ segment }: DialogueEditorProps) {
                           e.target.value,
                         )
                       }
-                      placeholder="角色名称"
+                      placeholder={t("placeholderCharacterName")}
                       className="pl-8 text-sm"
                     />
                   </div>
@@ -326,7 +333,7 @@ export function DialogueEditor({ segment }: DialogueEditorProps) {
                     }
                   >
                     <SelectTrigger className="w-[120px] text-xs">
-                      <SelectValue placeholder="选择声音" />
+                      <SelectValue placeholder={t("selectVoicePlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
                       {AVAILABLE_AITTS_VOICES.map((v) => (
@@ -339,9 +346,9 @@ export function DialogueEditor({ segment }: DialogueEditorProps) {
                 </div>
               ) : (
                 <div className="flex h-9 items-center space-x-2 px-2">
-                  <Volume2 className="h-4 w-4 text-gray-500" />
-                  <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                    旁白
+                  <Volume2 className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium text-foreground">
+                    {t("narration")}
                   </span>
                 </div>
               )}
@@ -351,11 +358,11 @@ export function DialogueEditor({ segment }: DialogueEditorProps) {
                   handleLineChange(line.lineId, "text", e.target.value)
                 }
                 rows={2}
-                className="w-full resize-none bg-white dark:bg-gray-800"
+                className="w-full resize-none bg-background"
                 placeholder={
                   line.type === "dialogue"
-                    ? "输入对话内容和表演指导..."
-                    : "输入旁白内容..."
+                    ? t("placeholderDialogue")
+                    : t("placeholderNarration")
                 }
               />
             </div>
@@ -363,7 +370,7 @@ export function DialogueEditor({ segment }: DialogueEditorProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 self-center text-muted-foreground hover:text-destructive"
+              className="h-9 w-9 self-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
               onClick={() => handleRemoveLine(line.lineId)}
             >
               <X className="h-4 w-4" />
@@ -380,7 +387,7 @@ export function DialogueEditor({ segment }: DialogueEditorProps) {
             size="sm"
           >
             <Volume2 className="mr-2 h-4 w-4" />
-            添加旁白
+            {t("addNarration")}
           </Button>
           <Button
             onClick={() => handleAddLine("dialogue")}
@@ -388,13 +395,13 @@ export function DialogueEditor({ segment }: DialogueEditorProps) {
             size="sm"
           >
             <User className="mr-2 h-4 w-4" />
-            添加对话
+            {t("addDialogue")}
           </Button>
         </div>
         <div className="flex items-center space-x-4">
           {isDirty && !isSaving && (
             <p className="text-sm text-yellow-600 dark:text-yellow-400">
-              有未保存的更改
+              {t("unsavedChanges")}
             </p>
           )}
           <Button
@@ -407,7 +414,7 @@ export function DialogueEditor({ segment }: DialogueEditorProps) {
             ) : (
               <Save className="mr-2 h-4 w-4" />
             )}
-            保存剧本
+            {t("saveScript")}
           </Button>
         </div>
       </div>

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 import { Loader2, UploadCloud } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface ImageUploaderProps {
   segmentId: Id<"segments">;
@@ -16,6 +17,7 @@ export function ImageUploader({
   segmentId,
   onUploadComplete,
 }: ImageUploaderProps) {
+  const { t } = useTranslation();
   const [isUploading, setIsUploading] = useState(false);
   const generateUploadUrl = useConvexMutation(api.files.generateUploadUrl);
 
@@ -28,7 +30,7 @@ export function ImageUploader({
         onUploadComplete?.();
       },
       onError: (err) => {
-        toast.error("Failed to start processing. Please try again.");
+        toast.error(t("toastUploadProcessingFailed"));
         console.error(err);
       },
     },
@@ -38,7 +40,7 @@ export function ImageUploader({
     if (acceptedFiles.length === 0) return;
     const file = acceptedFiles[0];
     if (file.size > 5 * 1024 * 1024) {
-      toast.error("File is too large. Please upload an image under 5MB.");
+      toast.error(t("toastFileTooLarge"));
       return;
     }
 
@@ -59,7 +61,7 @@ export function ImageUploader({
       });
     } catch (error) {
       console.error("Upload failed:", error);
-      toast.error("Upload failed. Please check the console for details.");
+      toast.error(t("toastUploadFailed"));
     } finally {
       setIsUploading(false);
     }
@@ -79,25 +81,22 @@ export function ImageUploader({
       {...getRootProps()}
       className={`p-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors text-center ${
         isDragActive
-          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/10"
-          : "border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500"
+          ? "border-primary bg-primary/10"
+          : "border-border hover:border-primary/50"
       }`}
     >
       <input {...getInputProps()} />
       {isProcessing ? (
         <div className="flex flex-col items-center justify-center h-full">
-          <Loader2 className="h-8 w-8 text-gray-400 mb-2 animate-spin" />
-          <p className="text-sm text-muted-foreground">Uploading...</p>
+          <Loader2 className="h-8 w-8 text-muted-foreground mb-2 animate-spin" />
+          <p className="text-sm text-muted-foreground">{t("uploaderUploading")}</p>
         </div>
       ) : (
         <>
-          <UploadCloud className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+          <UploadCloud className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
           <p className="text-sm text-muted-foreground">
-            {isDragActive
-              ? "Drop the image here"
-              : "Drag & drop or click to upload"}
+            {isDragActive ? t("uploaderDropHere") : t("uploaderDragDrop")}
           </p>
-          <p className="text-xs text-muted-foreground">Max 5MB</p>
         </>
       )}
     </div>

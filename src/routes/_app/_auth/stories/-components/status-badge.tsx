@@ -1,6 +1,6 @@
 import { Doc } from "~/convex/_generated/dataModel";
 import { cn } from "@/utils/misc";
-import { Loader2, CheckCircle2, AlertTriangle, FileText } from "lucide-react";
+import { Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 interface StatusBadgeProps {
@@ -9,6 +9,10 @@ interface StatusBadgeProps {
 
 export function StatusBadge({ status }: StatusBadgeProps) {
   const { t } = useTranslation();
+
+  if (!status || status === "idle") {
+    return null;
+  }
 
   const statusConfig = {
     processing: {
@@ -26,17 +30,16 @@ export function StatusBadge({ status }: StatusBadgeProps) {
     error: {
       icon: <AlertTriangle className="mr-1 h-3.5 w-3.5" />,
       text: t("statusError"),
-      className: "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300",
-    },
-    idle: {
-      icon: <FileText className="mr-1 h-3.5 w-3.5" />,
-      text: t("statusIdle"),
       className:
-        "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
+        "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300",
     },
   };
 
-  const config = statusConfig[status ?? "idle"];
+  const config = statusConfig[status];
+
+  if (!config) {
+    return null;
+  }
 
   return (
     <div

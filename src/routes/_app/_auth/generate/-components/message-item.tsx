@@ -3,6 +3,7 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "~/convex/_generated/api";
 import { cn } from "@/utils/misc";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   message: Doc<"userMessages">;
@@ -11,6 +12,7 @@ type Props = {
 };
 
 export default function MessageItem({ message, children, isUser }: Props) {
+  const { t } = useTranslation();
   const { data: user } = useQuery(convexQuery(api.app.getCurrentUser, {}));
 
   if (!user) {
@@ -55,7 +57,7 @@ export default function MessageItem({ message, children, isUser }: Props) {
               <img
                 src="/images/app-icon.png"
                 className="h-full w-full rounded-full object-cover"
-                alt="AI"
+                alt={t("messageItemAiAvatarAlt")}
               />
             )}
           </div>

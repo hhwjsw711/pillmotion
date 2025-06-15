@@ -13,6 +13,7 @@ import {
 import { memo } from "react";
 import { toast } from "sonner";
 import { api } from "@cvx/_generated/api";
+import { useTranslation } from "react-i18next";
 
 interface MessageActionsProps {
   text: string | null;
@@ -20,6 +21,7 @@ interface MessageActionsProps {
 }
 
 export function PureMessageActions({ text, isLoading }: MessageActionsProps) {
+  const { t } = useTranslation();
   const [_, copyToClipboard] = useCopyToClipboard();
   const navigate = useNavigate();
 
@@ -49,17 +51,17 @@ export function PureMessageActions({ text, isLoading }: MessageActionsProps) {
               onClick={async () => {
                 const textToCopy = text?.trim();
                 if (!textToCopy) {
-                  toast.error("There's no text to copy!");
+                  toast.error(t("messageActionErrorNoTextToCopy"));
                   return;
                 }
                 await copyToClipboard(textToCopy);
-                toast.success("Copied to clipboard!");
+                toast.success(t("messageActionCopied"));
               }}
             >
               <Copy className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Copy</TooltipContent>
+          <TooltipContent>{t("messageActionCopy")}</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -71,19 +73,22 @@ export function PureMessageActions({ text, isLoading }: MessageActionsProps) {
               disabled={isPending}
               onClick={async () => {
                 if (!text) {
-                  toast.error("There is no content to create a story from.");
+                  toast.error(t("messageActionErrorNoContent"));
                   return;
                 }
-                const toastId = toast.loading("Creating story...");
+                const toastId = toast.loading(t("creatingStory"));
                 try {
                   // 第 1 步: 创建故事
-                  const newStoryId = await createStory({ script: text });
+                  const newStoryId = await createStory({
+                    title: t("untitledStory"),
+                    script: text,
+                  });
 
                   // 第 2 步: 初始化编辑器
-                  toast.loading("Initializing editor...", { id: toastId });
+                  toast.loading(t("initializingEditor"), { id: toastId });
                   await initializeEditor({ storyId: newStoryId });
 
-                  toast.success("Story created successfully!", { id: toastId });
+                  toast.success(t("storyCreatedSuccess"), { id: toastId });
 
                   // 第 3 步: 跳转页面
                   navigate({
@@ -91,7 +96,7 @@ export function PureMessageActions({ text, isLoading }: MessageActionsProps) {
                     params: { storyId: newStoryId },
                   });
                 } catch (error) {
-                  toast.error("Failed to create story.", { id: toastId });
+                  toast.error(t("storyCreatedError"), { id: toastId });
                   console.error(error);
                 }
               }}
@@ -99,7 +104,7 @@ export function PureMessageActions({ text, isLoading }: MessageActionsProps) {
               <Pencil className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Create Story</TooltipContent>
+          <TooltipContent>{t("messageActionCreateStory")}</TooltipContent>
         </Tooltip>
       </div>
     </TooltipProvider>

@@ -51,15 +51,21 @@ export const list = query({
     if (!userId) {
       return [];
     }
-    const query = args.status
-      ? ctx.db
-          .query("story")
-          .withIndex("by_user_status", (q) =>
-            q.eq("userId", userId).eq("status", args.status),
-          )
-      : ctx.db
-          .query("story")
-          .withIndex("userId", (q) => q.eq("userId", userId));
+    const { status } = args;
+    let query;
+    if (status) {
+      // Now, TypeScript knows for sure that 'status' inside this block is not undefined.
+      query = ctx.db
+        .query("story")
+        .withIndex("by_user_status", (q) =>
+          q.eq("userId", userId).eq("status", status),
+        );
+    } else {
+      // In the 'else' block, we handle the case where no status is provided.
+      query = ctx.db
+        .query("story")
+        .withIndex("userId", (q) => q.eq("userId", userId));
+    }
 
     return query.order("desc").collect();
   },
@@ -67,7 +73,7 @@ export const list = query({
 
 export const createStory = mutation({
   args: {
-    title: v.optional(v.string()),
+    title: v.string(),
     script: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -79,7 +85,7 @@ export const createStory = mutation({
     const storyId = await ctx.db.insert("story", {
       updatedAt: Date.now(),
       userId,
-      title: args.title ?? "新故事",
+      title: args.title,
       script: args.script ?? "",
       status: "draft",
       generationStatus: "idle",
@@ -143,6 +149,20 @@ export const updateStoryTitle = mutation({
     await verifyStoryOwnerHelper(ctx, args.storyId);
     await ctx.db.patch(args.storyId, {
       title: args.title,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const updateStylePrompt = mutation({
+  args: {
+    storyId: v.id("story"),
+    stylePrompt: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await verifyStoryOwnerHelper(ctx, args.storyId);
+    await ctx.db.patch(args.storyId, {
+      stylePrompt: args.stylePrompt,
       updatedAt: Date.now(),
     });
   },
@@ -361,17 +381,6 @@ export const updateStoryContextInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     // No auth check needed here, as it's only called by trusted server code.
-    await ctx.db.patch(args.storyId, { context: args.context });
-  },
-});
-
-export const updateStoryContext = mutation({
-  args: {
-    storyId: v.id("story"),
-    context: v.string(),
-  },
-  handler: async (ctx, args) => {
-    await verifyStoryOwnerHelper(ctx, args.storyId);
     await ctx.db.patch(args.storyId, { context: args.context });
   },
 });

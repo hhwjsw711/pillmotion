@@ -13,8 +13,10 @@ import {
   TooltipTrigger,
 } from "@/ui/tooltip";
 import { Send, Trash2, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export default function ChatWindow() {
+  const { t } = useTranslation();
   const [drivenIds, setDrivenIds] = useState<Set<string>>(new Set());
   const [isStreaming, setIsStreaming] = useState(false);
   const messages = useQuery(api.messages.listMessages);
@@ -56,7 +58,7 @@ export default function ChatWindow() {
         <div className="w-full max-w-4xl mx-auto space-y-6">
           {messages.length === 0 && (
             <div className="text-center text-muted-foreground pt-16">
-              还没有消息，开始对话吧！
+              {t("chatEmptyState")}
             </div>
           )}
           {messages.map((message) => (
@@ -111,7 +113,7 @@ export default function ChatWindow() {
                   ref={inputRef}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
-                  placeholder="输入您的消息..."
+                  placeholder={t("chatPlaceholder")}
                   disabled={isStreaming}
                   className="flex-1 text-base"
                 />
@@ -127,11 +129,15 @@ export default function ChatWindow() {
                       ) : (
                         <Send className="h-4 w-4" />
                       )}
-                      <span className="sr-only">发送</span>
+                      <span className="sr-only">{t("chatSend")}</span>
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{isStreaming ? "AI 正在回复..." : "发送消息"}</p>
+                    <p>
+                      {isStreaming
+                        ? t("chatTooltipSending")
+                        : t("chatTooltipSend")}
+                    </p>
                   </TooltipContent>
                 </Tooltip>
                 <Tooltip>
@@ -149,11 +155,11 @@ export default function ChatWindow() {
                       }}
                     >
                       <Trash2 className="h-4 w-4" />
-                      <span className="sr-only">清空对话</span>
+                      <span className="sr-only">{t("chatTooltipClear")}</span>
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>清空对话历史</p>
+                    <p>{t("chatTooltipClearDescription")}</p>
                   </TooltipContent>
                 </Tooltip>
               </div>

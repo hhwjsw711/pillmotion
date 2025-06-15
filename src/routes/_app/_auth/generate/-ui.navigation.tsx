@@ -1,39 +1,26 @@
-import {
-  ChevronUp,
-  ChevronDown,
-  Slash,
-  Check,
-  Settings,
-  LogOut,
-} from "lucide-react";
+import { Settings, LogOut } from "lucide-react";
 import { cn, useSignOut } from "@/utils/misc";
 import { ThemeSwitcher } from "@/ui/theme-switcher";
 import { LanguageSwitcher } from "@/ui/language-switcher";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuLabel,
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/ui/dropdown-menu";
 import { Button } from "@/ui/button";
-import { buttonVariants } from "@/ui/button-util";
-import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Route as DashboardRoute } from "@/routes/_app/_auth/dashboard/_layout.index";
 import { Route as SettingsRoute } from "@/routes/_app/_auth/dashboard/_layout.settings.index";
-import { Route as BillingSettingsRoute } from "@/routes/_app/_auth/dashboard/_layout.settings.billing";
 import { User } from "~/types";
-import { PLANS } from "@cvx/schema";
 import { Badge } from "@/ui/badge";
+import { useTranslation } from "react-i18next";
 
 export function Navigation({ user }: { user: User }) {
   const signOut = useSignOut();
-  const matchRoute = useMatchRoute();
   const navigate = useNavigate();
-  const isDashboardPath = matchRoute({ to: DashboardRoute.fullPath });
-  const isSettingsPath = matchRoute({ to: SettingsRoute.fullPath });
-  const isBillingPath = matchRoute({ to: BillingSettingsRoute.fullPath });
+  const { t } = useTranslation();
 
   if (!user) {
     return null;
@@ -63,7 +50,7 @@ export function Navigation({ user }: { user: User }) {
               variant="secondary"
               className="h-8 px-3 py-1.5 text-xs font-medium"
             >
-              {user.credits} credits
+              {t("credits", { count: user.credits })}
             </Badge>
             <Button
               variant="outline"
@@ -71,7 +58,7 @@ export function Navigation({ user }: { user: User }) {
               asChild
               className="h-8 text-xs font-medium"
             >
-              <Link to="/dashboard/billing">Buy more</Link>
+              <Link to="/dashboard/billing">{t("buyMore")}</Link>
             </Button>
           </div>
           <DropdownMenu modal={false}>
@@ -104,7 +91,7 @@ export function Navigation({ user }: { user: User }) {
                 onClick={() => navigate({ to: SettingsRoute.fullPath })}
               >
                 <span className="text-sm text-primary/60 group-hover:text-primary group-focus:text-primary">
-                  Settings
+                  {t("navSettings")}
                 </span>
                 <Settings className="h-[18px] w-[18px] stroke-[1.5px] text-primary/60 group-hover:text-primary group-focus:text-primary" />
               </DropdownMenuItem>
@@ -115,7 +102,7 @@ export function Navigation({ user }: { user: User }) {
                 )}
               >
                 <span className="w-full text-sm text-primary/60 group-hover:text-primary group-focus:text-primary">
-                  Theme
+                  {t("navTheme")}
                 </span>
                 <ThemeSwitcher />
               </DropdownMenuItem>
@@ -126,7 +113,7 @@ export function Navigation({ user }: { user: User }) {
                 )}
               >
                 <span className="w-full text-sm text-primary/60 group-hover:text-primary group-focus:text-primary">
-                  Language
+                  {t("navLanguage")}
                 </span>
                 <LanguageSwitcher />
               </DropdownMenuItem>
@@ -138,60 +125,12 @@ export function Navigation({ user }: { user: User }) {
                 onClick={() => signOut()}
               >
                 <span className="text-sm text-primary/60 group-hover:text-primary group-focus:text-primary">
-                  Log Out
+                  {t("navLogOut")}
                 </span>
                 <LogOut className="h-[18px] w-[18px] stroke-[1.5px] text-primary/60 group-hover:text-primary group-focus:text-primary" />
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      </div>
-
-      <div className="mx-auto flex w-full max-w-screen-xl items-center gap-3">
-        <div
-          className={cn(
-            `flex h-12 items-center border-b-2`,
-            isDashboardPath ? "border-primary" : "border-transparent",
-          )}
-        >
-          <Link
-            to={DashboardRoute.fullPath}
-            className={cn(
-              `${buttonVariants({ variant: "ghost", size: "sm" })} text-primary/80`,
-            )}
-          >
-            Dashboard
-          </Link>
-        </div>
-        <div
-          className={cn(
-            `flex h-12 items-center border-b-2`,
-            isSettingsPath ? "border-primary" : "border-transparent",
-          )}
-        >
-          <Link
-            to={SettingsRoute.fullPath}
-            className={cn(
-              `${buttonVariants({ variant: "ghost", size: "sm" })} text-primary/80`,
-            )}
-          >
-            Settings
-          </Link>
-        </div>
-        <div
-          className={cn(
-            `flex h-12 items-center border-b-2`,
-            isBillingPath ? "border-primary" : "border-transparent",
-          )}
-        >
-          <Link
-            to={BillingSettingsRoute.fullPath}
-            className={cn(
-              `${buttonVariants({ variant: "ghost", size: "sm" })} text-primary/80`,
-            )}
-          >
-            Billing
-          </Link>
         </div>
       </div>
     </nav>

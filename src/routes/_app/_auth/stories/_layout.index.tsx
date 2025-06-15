@@ -20,6 +20,8 @@ import {
 } from "@/ui/alert-dialog";
 import { Id } from "~/convex/_generated/dataModel";
 import { useTranslation } from "react-i18next";
+import { CreateStoryDialog } from "./-components/create-story-dialog";
+import { StoryCardSkeleton } from "./-components/story-card-skeleton";
 
 export const Route = createFileRoute("/_app/_auth/stories/_layout/")({
   component: StoriesPage,
@@ -32,6 +34,7 @@ export function StoriesPage() {
   const [storyToDelete, setStoryToDelete] = React.useState<Id<"story"> | null>(
     null,
   );
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false);
 
   const { mutateAsync: createStory, isPending: isCreating } = useMutation({
     mutationFn: useConvexMutation(api.story.createStory),
@@ -54,21 +57,31 @@ export function StoriesPage() {
     onError: (error) => {
       toast.error(t("storyDeletedError"), {
         description:
-          error instanceof Error ? error.message : "An unknown error occurred",
+          error instanceof Error ? error.message : t("unknownError"),
       });
       setStoryToDelete(null);
     },
   });
 
-  const isPending = isCreating || isInitializing;
+  const isPendingCreation = isCreating || isInitializing;
 
-  const handleCreateStory = async () => {
+  const handleCreateStory = async ({
+    title,
+    script,
+  }: {
+    title?: string;
+    script?: string;
+  }) => {
     const toastId = toast.loading(t("creatingStory"));
     try {
-      const storyId = await createStory({});
+      const storyId = await createStory({
+        title: title || t("untitledStory"),
+        script,
+      });
       toast.loading(t("initializingEditor"), { id: toastId });
       await initializeEditor({ storyId });
       toast.success(t("storyCreatedSuccess"), { id: toastId });
+      setIsCreateDialogOpen(false);
       navigate({
         to: "/stories/$storyId/refine",
         params: { storyId },
@@ -98,8 +111,11 @@ export function StoriesPage() {
       <div className="container mx-auto max-w-7xl px-4 pt-8 pb-12">
         <header className="mb-8 flex items-center justify-between">
           <h1 className="text-3xl font-bold">{t("myStories")}</h1>
-          <Button onClick={handleCreateStory} disabled={isPending}>
-            {isPending ? (
+          <Button
+            onClick={() => setIsCreateDialogOpen(true)}
+            disabled={isPendingCreation}
+          >
+            {isPendingCreation ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <PlusCircle className="mr-2 h-4 w-4" />
@@ -109,8 +125,10 @@ export function StoriesPage() {
         </header>
 
         {stories === undefined && (
-          <div className="flex h-64 items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <StoryCardSkeleton key={index} />
+            ))}
           </div>
         )}
 
@@ -125,10 +143,10 @@ export function StoriesPage() {
             </p>
             <Button
               className="mt-4"
-              onClick={handleCreateStory}
-              disabled={isPending}
+              onClick={() => setIsCreateDialogOpen(true)}
+              disabled={isPendingCreation}
             >
-              {isPending ? (
+              {isPendingCreation ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <PlusCircle className="mr-2 h-4 w-4" />
@@ -179,6 +197,12 @@ export function StoriesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <CreateStoryDialog
+        isOpen={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        onCreateStory={handleCreateStory}
+        isPending={isPendingCreation}
+      />
     </>
   );
 }

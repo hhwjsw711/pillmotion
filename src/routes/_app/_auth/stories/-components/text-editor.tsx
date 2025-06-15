@@ -4,6 +4,7 @@ import { extensions } from "~/src/utils/extensions";
 import { api } from "~/convex/_generated/api";
 import { Id } from "~/convex/_generated/dataModel";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const editorCharCount = new Map<Id<"story">, number>();
 const editorCharCountListeners = new Map<Id<"story">, Set<() => void>>();
@@ -63,6 +64,7 @@ function CharCountUpdater({ id }: { id: Id<"story"> }) {
 
 export function TextEditor(props: { id: Id<"story"> }) {
   const sync = useTiptapSync(api.prosemirror, props.id, { debug: true });
+  const { t } = useTranslation();
 
   return sync.initialContent !== null ? (
     <EditorProvider
@@ -79,6 +81,6 @@ export function TextEditor(props: { id: Id<"story"> }) {
       <EditorContent editor={null} className="h-full" />
     </EditorProvider>
   ) : (
-    <p>Loading...</p>
+    <p>{t("loadingEditor")}</p>
   );
 }

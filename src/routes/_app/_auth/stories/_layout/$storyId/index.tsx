@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { SegmentCard } from "../../-components/segment-card";
 import { useQuery } from "convex/react";
 import { useConvexMutation } from "@convex-dev/react-query";
@@ -9,12 +9,20 @@ import { Spinner } from "@/ui/spinner";
 import { Button } from "@/ui/button";
 import {
   ArrowLeft,
-  Edit,
   Settings,
   Clapperboard,
   Plus,
   Loader2,
+  FileText,
+  Palette,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
 import { useEffect, useState } from "react";
 import {
   DndContext,
@@ -33,7 +41,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 import { useMemo } from "react";
-import { TransitionEditor } from "../../-components/transition-editor";
+import { useTranslation } from "react-i18next";
+import { SegmentCardSkeleton } from "../../-components/segment-card-skeleton";
 
 export const Route = createFileRoute("/_app/_auth/stories/_layout/$storyId/")({
   component: Story,
@@ -41,6 +50,7 @@ export const Route = createFileRoute("/_app/_auth/stories/_layout/$storyId/")({
 
 export default function Story() {
   const { storyId } = Route.useParams();
+  const { t } = useTranslation();
   const story = useQuery(api.story.getStory, {
     storyId: storyId as Id<"story">,
   });
@@ -56,7 +66,9 @@ export default function Story() {
   if (story === null) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-gray-500 dark:text-gray-400">未找到该故事。</div>
+        <div className="text-gray-500 dark:text-gray-400">
+          {t("storyNotFound")}
+        </div>
       </div>
     );
   }
@@ -100,31 +112,25 @@ function SortableSegmentItem({
     <div ref={setNodeRef} style={style}>
       <SegmentCard
         segment={segment}
+        storyId={storyId}
+        transition={transition}
+        isLast={isLast}
         dragHandleProps={{ ...attributes, ...listeners }}
         className={isDragging ? "shadow-2xl ring-2 ring-blue-500" : ""}
       />
-      {!isLast && (
-        <div className="px-4">
-          <TransitionEditor
-            storyId={storyId}
-            afterSegmentId={segment._id}
-            order={segment.order}
-            transition={transition}
-          />
-        </div>
-      )}
     </div>
   );
 }
 
 function StorySection({ story }: { story: Doc<"story"> }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-6">
       <div className="space-y-4">
         <Button variant="ghost" size="sm" asChild className="pl-0">
           <Link to="/stories">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            返回我的故事集
+            {t("backToMyStories")}
           </Link>
         </Button>
         <div className="flex flex-col items-start justify-between gap-4 border-b pb-4 md:flex-row md:items-center">
@@ -135,36 +141,49 @@ function StorySection({ story }: { story: Doc<"story"> }) {
             {story.generationStatus === "processing" && (
               <span className="flex items-center gap-1 text-sm text-blue-500">
                 <Spinner />
-                生成中...
+                {t("statusGenerating")}
               </span>
             )}
             {story.generationStatus === "error" && (
-              <span className="text-sm text-red-500">生成失败</span>
+              <span className="text-sm text-red-500">
+                {t("statusGenerationFailed")}
+              </span>
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" asChild>
-              <Link
-                to="/stories/$storyId/refine"
-                params={{ storyId: story._id }}
-              >
-                <Edit className="mr-2 h-4 w-4" />
-                编辑剧本
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link
-                to="/stories/$storyId/style"
-                params={{ storyId: story._id }}
-              >
-                <Settings className="h-4 w-4" />
-                <span className="ml-2">风格设置</span>
-              </Link>
-            </Button>
-            <Button variant="secondary" disabled>
-              <Clapperboard className="mr-2 h-4 w-4" />
-              导出视频
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <Settings className="mr-2 h-4 w-4" />
+                  {t("storySettings")}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link
+                    to="/stories/$storyId/refine"
+                    params={{ storyId: story._id }}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    <span>{t("editScript")}</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link
+                    to="/stories/$storyId/style"
+                    params={{ storyId: story._id }}
+                  >
+                    <Palette className="mr-2 h-4 w-4" />
+                    <span>{t("styleSettings")}</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled>
+                  <Clapperboard className="mr-2 h-4 w-4" />
+                  <span>{t("exportVideo")}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>
@@ -175,6 +194,8 @@ function StorySection({ story }: { story: Doc<"story"> }) {
 
 function StorySegments({ story }: { story: Doc<"story"> }) {
   const { _id: storyId } = story;
+  const navigate = useNavigate();
+  const { t } = useTranslation();
   const segments = useQuery(api.segments.getByStory, { storyId });
   const transitions = useQuery(api.transitions.getForStory, { storyId });
   const reorderMutation = useConvexMutation(api.segments.reorderSegments);
@@ -198,11 +219,11 @@ function StorySegments({ story }: { story: Doc<"story"> }) {
       await reorderMutation({ storyId, segmentIds: orderedIds });
     },
     onSuccess: () => {
-      toast.success("场景顺序已保存。");
+      toast.success(t("toastOrderSaved"));
     },
     onError: (err) => {
-      toast.error("保存顺序失败", {
-        description: err instanceof Error ? err.message : "未知错误",
+      toast.error(t("toastOrderSaveFailed"), {
+        description: err instanceof Error ? err.message : t("unknownError"),
       });
       if (segments) setActiveSegments(segments);
     },
@@ -210,14 +231,27 @@ function StorySegments({ story }: { story: Doc<"story"> }) {
 
   const { mutate: addSegment, isPending: isAdding } = useMutation({
     mutationFn: async () => {
-      await addSegmentMutation({ storyId });
+      // We assume the convex mutation returns the ID of the new segment.
+      const newSegmentId = await addSegmentMutation({ storyId });
+      if (!newSegmentId) {
+        throw new Error("后台未能返回新场景的ID。");
+      }
+      return newSegmentId;
     },
-    onSuccess: () => {
-      toast.success("新场景已添加到末尾。");
+    onSuccess: (newSegmentId) => {
+      toast.success(t("toastSegmentAdded"));
+      // Navigate to the new segment editor immediately.
+      navigate({
+        to: "/stories/$storyId/segments/$segmentId",
+        params: {
+          storyId,
+          segmentId: newSegmentId,
+        },
+      });
     },
     onError: (err) => {
-      toast.error("添加场景失败。", {
-        description: err instanceof Error ? err.message : "未知错误",
+      toast.error(t("toastSegmentAddFailed"), {
+        description: err instanceof Error ? err.message : t("unknownError"),
       });
     },
   });
@@ -246,12 +280,9 @@ function StorySegments({ story }: { story: Doc<"story"> }) {
 
   if (segments === undefined) {
     return (
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-        {[...Array(3)].map((_, i) => (
-          <div
-            key={i}
-            className="h-64 animate-pulse rounded-lg bg-gray-200 dark:bg-gray-700"
-          />
+      <div className="grid grid-cols-1 gap-y-4 md:grid-cols-2 md:gap-x-8 lg:grid-cols-3">
+        {[...Array(6)].map((_, i) => (
+          <SegmentCardSkeleton key={i} />
         ))}
       </div>
     );
@@ -261,7 +292,7 @@ function StorySegments({ story }: { story: Doc<"story"> }) {
     return (
       <div className="flex h-48 flex-col items-center justify-center space-y-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
         <p className="text-center text-gray-500 dark:text-gray-400">
-          这个故事还没有任何场景
+          {t("noSegmentsInStory")}
         </p>
         <Button onClick={() => addSegment()} disabled={isAdding}>
           {isAdding ? (
@@ -269,7 +300,7 @@ function StorySegments({ story }: { story: Doc<"story"> }) {
           ) : (
             <Plus className="mr-2 h-4 w-4" />
           )}
-          添加第一个场景
+          {t("addFirstSegment")}
         </Button>
       </div>
     );
@@ -288,7 +319,7 @@ function StorySegments({ story }: { story: Doc<"story"> }) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              共 {segments.length} 个场景
+              {t("totalSegments", { count: segments.length })}
             </p>
             <Button
               variant="outline"
@@ -301,10 +332,10 @@ function StorySegments({ story }: { story: Doc<"story"> }) {
               ) : (
                 <Plus className="mr-2 h-4 w-4" />
               )}
-              添加新场景
+              {t("addNewSegment")}
             </Button>
           </div>
-          <div className="grid grid-cols-1 gap-y-4 md:grid-cols-2 md:gap-x-8 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-y-8 md:grid-cols-2 md:gap-x-8 lg:grid-cols-3">
             {activeSegments?.map((segment, index) => (
               <SortableSegmentItem
                 key={segment._id}

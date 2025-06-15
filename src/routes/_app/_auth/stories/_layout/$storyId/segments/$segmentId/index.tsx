@@ -10,7 +10,6 @@ import {
   Loader2,
   CheckCircle2,
   Bot,
-  Info,
   FileText,
 } from "lucide-react";
 import { Button } from "@/ui/button";
@@ -21,26 +20,15 @@ import { toast } from "sonner";
 import { cn } from "@/utils/misc";
 import { ImageUploader } from "../../../../-components/image-uploader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/ui/tooltip";
 import { ImageVersionSource } from "~/convex/schema";
 import { DialogueEditor } from "../../../../-components/dialogue-editor";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute(
   "/_app/_auth/stories/_layout/$storyId/segments/$segmentId/",
 )({
   component: SegmentEditor,
 });
-
-const sourceDisplayName: Record<ImageVersionSource, string> = {
-  ai_generated: "AI 生成",
-  ai_edited: "AI 编辑",
-  user_uploaded: "用户上传",
-};
 
 function VersionCard({
   version,
@@ -53,19 +41,26 @@ function VersionCard({
   onSelect: () => void;
   isSelecting: boolean;
 }) {
+  const { t } = useTranslation();
   const thumbnailUrl = useQuery(
     api.files.getFileUrl,
     version.previewImage ? { storageId: version.previewImage } : "skip",
   );
 
+  const sourceDisplayName: Record<ImageVersionSource, string> = {
+    ai_generated: t("sourceAIGenerated"),
+    ai_edited: t("sourceAIEdited"),
+    user_uploaded: t("sourceUserUploaded"),
+  };
+
   return (
     <div
       className={cn(
         "rounded-lg border p-3 space-y-2 bg-card",
-        isSelected && "ring-2 ring-blue-500 border-blue-500",
+        isSelected && "ring-2 ring-primary",
       )}
     >
-      <div className="aspect-video w-full rounded bg-gray-100 dark:bg-gray-800">
+      <div className="aspect-video w-full rounded bg-muted">
         {thumbnailUrl && (
           <img
             src={thumbnailUrl}
@@ -80,7 +75,7 @@ function VersionCard({
         </p>
       )}
       <p className="text-xs text-muted-foreground">
-        来源: {sourceDisplayName[version.source]}
+        {t("versionSource", { source: sourceDisplayName[version.source] })}
       </p>
       <Button
         variant={isSelected ? "default" : "secondary"}
@@ -90,7 +85,7 @@ function VersionCard({
         disabled={isSelected || isSelecting}
       >
         {isSelected && <CheckCircle2 className="mr-2 h-4 w-4" />}
-        {isSelected ? "当前版本" : "选择此版本"}
+        {isSelected ? t("versionCardCurrent") : t("versionCardSelect")}
       </Button>
     </div>
   );
@@ -98,6 +93,7 @@ function VersionCard({
 
 export default function SegmentEditor() {
   const { storyId, segmentId } = Route.useParams();
+  const { t } = useTranslation();
   const [promptText, setPromptText] = useState("");
   const [tuningPrompt, setTuningPrompt] = useState("");
   const prevIsGenerating = useRef<boolean | undefined>();
@@ -126,9 +122,9 @@ export default function SegmentEditor() {
 
   const { mutate: selectVersion, isPending: isSelecting } = useMutation({
     mutationFn: useConvexMutation(api.imageVersions.selectVersion),
-    onSuccess: () => toast.success("已选择新的版本"),
+    onSuccess: () => toast.success(t("toastVersionSelected")),
     onError: (err) => {
-      toast.error("选择失败，请重试");
+      toast.error(t("toastVersionSelectFailed"));
       console.error(err);
     },
   });
@@ -156,30 +152,30 @@ export default function SegmentEditor() {
       segment?.isGenerating === false &&
       !segment?.error
     ) {
-      toast.success("图片处理完成！");
+      toast.success(t("toastImageProcessed"));
     }
     prevIsGenerating.current = segment?.isGenerating;
   }, [segment?.isGenerating, segment?.error]);
 
   const handleRegenerate = async () => {
     if (!promptText.trim()) {
-      toast.error("Prompt 不能为空");
+      toast.error(t("toastPromptEmpty"));
       return;
     }
     await regenerateImage({
       segmentId: segmentId as Id<"segments">,
       prompt: promptText,
     });
-    toast.success("新的图片生成任务已开始！");
+    toast.success(t("toastNewImageGenerationStarted"));
   };
 
   const handleEditImage = async () => {
     if (!tuningPrompt.trim()) {
-      toast.error("编辑指令不能为空");
+      toast.error(t("toastEditPromptEmpty"));
       return;
     }
     if (!selectedVersion) {
-      toast.error("请先选择一个要编辑的版本");
+      toast.error(t("toastNoVersionSelected"));
       return;
     }
 
@@ -188,7 +184,7 @@ export default function SegmentEditor() {
       prompt: tuningPrompt,
       versionIdToEdit: selectedVersion._id,
     });
-    toast.success("图片编辑任务已开始！");
+    toast.success(t("toastImageEditStarted"));
     setTuningPrompt(""); // Clear input after submission
   };
 
@@ -200,37 +196,37 @@ export default function SegmentEditor() {
         <Button asChild variant="ghost" size="sm">
           <Link to="/stories/$storyId" params={{ storyId }}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            返回故事
+            {t("backToStory")}
           </Link>
         </Button>
       </div>
 
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">
-          编辑场景 {segment ? segment.order + 1 : ""}
+          {t("editSceneTitle", { order: segment ? segment.order + 1 : "" })}
         </h1>
 
-        {segment === undefined && <div>加载中...</div>}
+        {segment === undefined && <div>{t("loading")}...</div>}
 
         {segment && (
           <div className="grid grid-cols-1 md:grid-cols-[1fr,320px] gap-8 items-start">
             <div className="space-y-4">
-              <div className="aspect-video w-full overflow-hidden rounded-lg border bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+              <div className="aspect-video w-full overflow-hidden rounded-lg border bg-muted flex items-center justify-center">
                 {imageUrl && !segment.isGenerating ? (
                   <img
                     src={imageUrl}
-                    alt="场景图片"
+                    alt={t("imageAltScene")}
                     className="h-full w-full object-contain"
                   />
                 ) : (
-                  <div className="flex flex-col items-center justify-center text-gray-500">
+                  <div className="flex flex-col items-center justify-center text-muted-foreground">
                     {isProcessing ? (
                       <>
-                        <Loader2 className="h-8 w-8 animate-spin text-blue-500 mb-2" />
-                        <span>生成中...</span>
+                        <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
+                        <span>{t("imageGenerating")}</span>
                       </>
                     ) : (
-                      "没有可用的图片"
+                      t("imageNotAvailable")
                     )}
                   </div>
                 )}
@@ -239,15 +235,15 @@ export default function SegmentEditor() {
                 <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="script">
                     <FileText className="mr-2 h-4 w-4" />
-                    剧本 & 配音
+                    {t("tabScriptAndVoice")}
                   </TabsTrigger>
-                  <TabsTrigger value="edit">
+                  <TabsTrigger value="quick-edit">
                     <Bot className="mr-2 h-4 w-4" />
-                    聊天编辑
+                    {t("tabQuickEdit")}
                   </TabsTrigger>
-                  <TabsTrigger value="generate">
+                  <TabsTrigger value="regenerate">
                     <Sparkles className="mr-2 h-4 w-4" />
-                    生成新图
+                    {t("tabRegenerate")}
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="script">
@@ -255,51 +251,21 @@ export default function SegmentEditor() {
                     <DialogueEditor segment={segment} />
                   </div>
                 </TabsContent>
-                <TabsContent value="edit">
+                <TabsContent value="quick-edit">
                   <div className="space-y-4 rounded-b-lg border border-t-0 bg-background p-4">
-                    <div className="flex justify-between items-center">
+                    <div className="space-y-1">
+                      <h4 className="font-semibold">{t("quickEditTitle")}</h4>
                       <p className="text-sm text-muted-foreground">
-                        使用聊天的方式来修改当前选中的图片。
+                        {t("quickEditDescription")}
                       </p>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                            >
-                              <Info className="h-4 w-4 text-muted-foreground" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-xs" side="top">
-                            <div className="p-2 space-y-2 text-left">
-                              <h4 className="font-semibold">编辑技巧</h4>
-                              <ul className="list-disc list-inside text-xs space-y-1">
-                                <li>
-                                  <b>修改文字:</b> 使用引号，例如:
-                                  <br />
-                                  "把 '你好' 改成 '再见'"
-                                </li>
-                                <li>
-                                  <b>保留主体:</b> 明确指出要保留什么，例如:
-                                  <br />
-                                  "背景换成海滩，人物保持不变"
-                                </li>
-                                <li>
-                                  <b>风格迁移:</b> "变成梵高风格的油画"
-                                </li>
-                              </ul>
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
                     </div>
                     <div className="grid w-full gap-2">
-                      <Label htmlFor="tuning-prompt-input">编辑指令</Label>
+                      <Label htmlFor="tuning-prompt-input">
+                        {t("editPromptLabel")}
+                      </Label>
                       <Textarea
                         id="tuning-prompt-input"
-                        placeholder="例如: 让他微笑 / 换成夜晚的场景，加上月亮 / 给他一副墨镜 / 变成梵高风格的油画"
+                        placeholder={t("editPromptPlaceholder")}
                         rows={3}
                         value={tuningPrompt}
                         onChange={(e) => setTuningPrompt(e.target.value)}
@@ -307,7 +273,7 @@ export default function SegmentEditor() {
                       />
                       {!selectedVersion && !isProcessing && (
                         <p className="text-xs text-amber-600 dark:text-amber-500">
-                          请先从右侧版本历史中选择一张图片以开始编辑。
+                          {t("editPromptError")}
                         </p>
                       )}
                     </div>
@@ -321,20 +287,23 @@ export default function SegmentEditor() {
                       ) : (
                         <Bot className="mr-2 h-4 w-4" />
                       )}
-                      {isEditing ? "编辑中..." : "发送指令"}
+                      {isEditing ? t("buttonEditing") : t("buttonApplyEdit")}
                     </Button>
                   </div>
                 </TabsContent>
-                <TabsContent value="generate">
+                <TabsContent value="regenerate">
                   <div className="space-y-4 rounded-b-lg border border-t-0 bg-background p-4">
-                    <p className="text-sm text-muted-foreground">
-                      在这里通过修改 Prompt 来生成一个全新的图片版本。
-                    </p>
+                    <div className="space-y-1">
+                      <h4 className="font-semibold">{t("regenerateTitle")}</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {t("regenerateDescription")}
+                      </p>
+                    </div>
                     <div className="grid w-full gap-2">
-                      <Label htmlFor="prompt-input">AI 绘图指令 (Prompt)</Label>
+                      <Label htmlFor="prompt-input">{t("promptLabel")}</Label>
                       <Textarea
                         id="prompt-input"
-                        placeholder="请输入详细的英文 Prompt..."
+                        placeholder={t("promptPlaceholder")}
                         rows={6}
                         value={promptText}
                         onChange={(e) => setPromptText(e.target.value)}
@@ -351,7 +320,9 @@ export default function SegmentEditor() {
                       ) : (
                         <Sparkles className="mr-2 h-4 w-4" />
                       )}
-                      {isRegenerating ? "生成中..." : "生成新版本"}
+                      {isRegenerating
+                        ? t("buttonGenerating")
+                        : t("buttonGenerateNewVersion")}
                     </Button>
                   </div>
                 </TabsContent>
@@ -360,16 +331,18 @@ export default function SegmentEditor() {
 
             <div className="w-full md:w-80 space-y-4">
               <div className="space-y-2">
-                <h3 className="font-semibold">上传自定义图片</h3>
+                <h3 className="font-semibold">{t("uploadCustomImage")}</h3>
                 <ImageUploader segmentId={segment._id} />
               </div>
               <div className="space-y-2">
-                <h3 className="font-semibold">版本历史</h3>
+                <h3 className="font-semibold">{t("versionHistory")}</h3>
                 <div className="max-h-[60vh] overflow-y-auto space-y-3 pr-2 border rounded-lg p-2 bg-muted/50">
-                  {versions === undefined && <div>加载版本历史...</div>}
+                  {versions === undefined && (
+                    <div>{t("loadingVersionHistory")}...</div>
+                  )}
                   {versions && versions.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-4">
-                      暂无历史版本
+                      {t("noVersionHistory")}
                     </p>
                   )}
                   {versions?.map((version) => (
