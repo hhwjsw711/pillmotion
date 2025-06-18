@@ -1,4 +1,7 @@
 import { Doc } from "@cvx/_generated/dataModel";
+import { convexQuery } from "@convex-dev/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "~/convex/_generated/api";
 
 type Props = {
   message: Doc<"userMessages">;
@@ -7,6 +10,12 @@ type Props = {
 };
 
 export default function MessageItem({ message, children, isUser }: Props) {
+  const { data: user } = useQuery(convexQuery(api.app.getCurrentUser, {}));
+
+  if (!user) {
+    return null;
+  }
+
   return (
     <>
       {isUser && (
@@ -27,7 +36,23 @@ export default function MessageItem({ message, children, isUser }: Props) {
           <div
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${isUser ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-700"} font-medium text-sm`}
           >
-            {isUser ? "U" : "AI"}
+            {isUser ? (
+              user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  className="h-full w-full rounded-full object-cover"
+                  alt={user.username ?? user.email}
+                />
+              ) : (
+                <div className="h-full w-full rounded-full bg-gradient-to-br from-lime-400 from-10% via-cyan-300 to-blue-500" />
+              )
+            ) : (
+              <img
+                src="/images/pill-logo.jpg"
+                className="h-full w-full rounded-lg object-cover"
+                alt="AI Avatar"
+              />
+            )}
           </div>
 
           <div

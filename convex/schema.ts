@@ -61,6 +61,20 @@ const pricesValidator = v.object({
   [CURRENCIES.EUR]: priceValidator,
 });
 
+export const storyStatusValidator = v.union(
+  v.literal("draft"),
+  v.literal("unpublished"),
+  v.literal("published"),
+  v.literal("archived"),
+);
+export type StoryStatus = Infer<typeof storyStatusValidator>;
+
+export const storyFormatValidator = v.union(
+  v.literal("vertical"),
+  v.literal("horizontal"),
+);
+export type StoryFormat = Infer<typeof storyFormatValidator>;
+
 const schema = defineSchema({
   ...authTables,
   users: defineTable({
@@ -108,6 +122,17 @@ const schema = defineSchema({
     prompt: v.string(),
     responseStreamId: StreamIdValidator,
   }).index("by_stream", ["responseStreamId"]),
+  story: defineTable({
+    updatedAt: v.number(),
+    userId: v.id("users"),
+    title: v.string(),
+    script: v.string(),
+    status: storyStatusValidator,
+    format: v.optional(storyFormatValidator),
+  })
+    .index("userId", ["userId"])
+    .index("by_user_status", ["userId", "status"])
+    .searchIndex("search_story", { searchField: "script" }),
 });
 
 export default schema;

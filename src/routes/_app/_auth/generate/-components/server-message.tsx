@@ -5,6 +5,7 @@ import { api } from "@cvx/_generated/api";
 import { Doc } from "@cvx/_generated/dataModel";
 import { useMemo, useEffect } from "react";
 import Markdown from "react-markdown";
+import { MessageActions } from "./message-actions";
 
 export function ServerMessage({
   message,
@@ -40,12 +41,17 @@ export function ServerMessage({
     scrollToBottom();
   }, [text, scrollToBottom]);
 
+  const isLoading = status === "pending" || status === "streaming";
+
   return (
-    <div className="md-answer">
-      <Markdown>{text || "Thinking..."}</Markdown>
-      {status === "error" && (
-        <div className="text-red-500 mt-2">Error loading response</div>
-      )}
-    </div>
+    <>
+      <div className="md-answer">
+        <Markdown>{text || "Thinking..."}</Markdown>
+        {status === "error" && (
+          <div className="text-red-500 mt-2">Error loading response</div>
+        )}
+      </div>
+      <MessageActions text={text} isLoading={isLoading} />
+    </>
   );
 }
