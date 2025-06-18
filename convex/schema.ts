@@ -1,4 +1,5 @@
 import { defineSchema, defineTable } from "convex/server";
+import { StreamIdValidator } from "@convex-dev/persistent-text-streaming";
 import { authTables } from "@convex-dev/auth/server";
 import { v, Infer } from "convex/values";
 
@@ -103,6 +104,10 @@ const schema = defineSchema({
   })
     .index("userId", ["userId"])
     .index("stripeId", ["stripeId"]),
+  userMessages: defineTable({
+    prompt: v.string(),
+    responseStreamId: StreamIdValidator,
+  }).index("by_stream", ["responseStreamId"]),
 });
 
 export default schema;

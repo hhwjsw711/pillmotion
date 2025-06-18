@@ -3,6 +3,7 @@ import { auth } from "./auth";
 import { ActionCtx, httpAction } from "@cvx/_generated/server";
 import { ERRORS } from "~/errors";
 import { stripe } from "@cvx/stripe";
+import { streamChat } from "@cvx/chat";
 import { STRIPE_WEBHOOK_SECRET } from "@cvx/env";
 import { z } from "zod";
 import { internal } from "@cvx/_generated/api";
@@ -282,6 +283,36 @@ http.route({
     }
 
     return new Response(null);
+  }),
+});
+
+http.route({
+  path: "/chat-stream",
+  method: "POST",
+  handler: streamChat,
+});
+
+http.route({
+  path: "/chat-stream",
+  method: "OPTIONS",
+  handler: httpAction(async (_, request) => {
+    const headers = request.headers;
+    if (
+      headers.get("Origin") !== null &&
+      headers.get("Access-Control-Request-Method") !== null &&
+      headers.get("Access-Control-Request-Headers") !== null
+    ) {
+      return new Response(null, {
+        headers: new Headers({
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST",
+          "Access-Control-Allow-Headers": "Content-Type, Digest, Authorization",
+          "Access-Control-Max-Age": "86400",
+        }),
+      });
+    } else {
+      return new Response();
+    }
   }),
 });
 

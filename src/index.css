@@ -106,3 +106,241 @@ img {
   background-image: linear-gradient(90deg, var(--muted-grid) 1px, transparent 0),
     linear-gradient(180deg, var(--muted-grid) 1px, transparent 0);
 }
+
+/* Basic styling for markdown content */
+.md-answer {
+  color: #333;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  line-height: 1.6;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+/* Headings */
+.md-answer h1,
+.md-answer h2,
+.md-answer h3,
+.md-answer h4,
+.md-answer h5,
+.md-answer h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.75em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.md-answer h1 {
+  font-size: 2em;
+  border-bottom: 1px solid #eaecef;
+  padding-bottom: 0.3em;
+}
+
+.md-answer h2 {
+  font-size: 1.5em;
+  border-bottom: 1px solid #eaecef;
+  padding-bottom: 0.3em;
+}
+
+.md-answer h3 {
+  font-size: 1.25em;
+}
+
+.md-answer h4 {
+  font-size: 1em;
+}
+
+.md-answer h5 {
+  font-size: 0.875em;
+}
+
+.md-answer h6 {
+  font-size: 0.85em;
+  color: #6a737d;
+}
+
+/* Paragraphs and text */
+.md-answer p {
+  margin-top: 0;
+  margin-bottom: 1em;
+}
+
+.md-answer strong {
+  font-weight: 600;
+}
+
+.md-answer em {
+  font-style: italic;
+}
+
+.md-answer del {
+  text-decoration: line-through;
+}
+
+/* Links */
+.md-answer a {
+  color: #0366d6;
+  text-decoration: none;
+}
+
+.md-answer a:hover {
+  text-decoration: underline;
+}
+
+/* Lists */
+.md-answer ul,
+.md-answer ol {
+  padding-left: 2em;
+  margin-top: 0;
+  margin-bottom: 1em;
+}
+
+.md-answer ul {
+  list-style-type: disc;
+}
+
+.md-answer ol {
+  list-style-type: decimal;
+}
+
+.md-answer li {
+  margin-bottom: 0.5em;
+}
+
+.md-answer li > ul,
+.md-answer li > ol {
+  margin-top: 0.5em;
+  margin-bottom: 0;
+}
+
+/* Code */
+.md-answer code {
+  font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  background-color: rgba(27, 31, 35, 0.05);
+  border-radius: 3px;
+}
+
+.md-answer pre {
+  font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  padding: 1em;
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+  background-color: #f6f8fa;
+  border-radius: 3px;
+  margin-top: 0;
+  margin-bottom: 1em;
+}
+
+.md-answer pre code {
+  background-color: transparent;
+  padding: 0;
+  margin: 0;
+  font-size: 100%;
+  word-break: normal;
+  white-space: pre;
+  border: 0;
+}
+
+/* Blockquotes */
+.md-answer blockquote {
+  margin: 0 0 1em;
+  padding: 0 1em;
+  color: #6a737d;
+  border-left: 0.25em solid #dfe2e5;
+}
+
+.md-answer blockquote > :first-child {
+  margin-top: 0;
+}
+
+.md-answer blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* Tables */
+.md-answer table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 0;
+  margin-bottom: 1em;
+}
+
+.md-answer table th,
+.md-answer table td {
+  padding: 0.5em 1em;
+  border: 1px solid #dfe2e5;
+}
+
+.md-answer table th {
+  font-weight: 600;
+  background-color: #f6f8fa;
+}
+
+.md-answer table tr:nth-child(2n) {
+  background-color: #f6f8fa;
+}
+
+/* Horizontal rule */
+.md-answer hr {
+  height: 0.25em;
+  padding: 0;
+  margin: 1.5em 0;
+  background-color: #e1e4e8;
+  border: 0;
+}
+
+/* Images */
+.md-answer img {
+  max-width: 100%;
+  box-sizing: border-box;
+  display: block;
+  margin: 1em 0;
+}
+
+/* Task lists */
+.md-answer input[type="checkbox"] {
+  margin-right: 0.5em;
+  vertical-align: middle;
+}
+
+/* Code highlighting (basic) */
+.md-answer .hljs-keyword,
+.md-answer .hljs-selector-tag {
+  color: #d73a49;
+}
+
+.md-answer .hljs-string {
+  color: #032f62;
+}
+
+.md-answer .hljs-title,
+.md-answer .hljs-section,
+.md-answer .hljs-name {
+  color: #6f42c1;
+}
+
+.md-answer .hljs-comment {
+  color: #6a737d;
+}
+
+.md-answer .hljs-number {
+  color: #005cc5;
+}
+
+/* Footnotes */
+.md-answer .footnote {
+  font-size: 0.8em;
+  vertical-align: super;
+}
+
+.md-answer .footnotes {
+  font-size: 0.85em;
+  color: #6a737d;
+  border-top: 1px solid #eaecef;
+  margin-top: 2em;
+}
