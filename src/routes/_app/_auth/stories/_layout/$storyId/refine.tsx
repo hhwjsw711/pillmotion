@@ -1,8 +1,8 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { TextEditor, useEditorCharacterCount } from "./-components/text-editor";
 import { Id } from "~/convex/_generated/dataModel";
-import { useQuery } from "@tanstack/react-query";
-import { convexQuery } from "@convex-dev/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { convexQuery, useConvexMutation } from "@convex-dev/react-query";
 import { api } from "~/convex/_generated/api";
 import { EditableTitle } from "./-components/editable-title";
 import { Button } from "@/ui/button";
@@ -12,9 +12,18 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
+  DialogClose,
 } from "@/ui/dialog";
-import { ArrowLeft, Smartphone, Monitor, Sparkles } from "lucide-react";
+import {
+  ArrowLeft,
+  Smartphone,
+  Monitor,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { StoryFormat } from "~/convex/schema";
 import {
   Tooltip,
@@ -36,6 +45,7 @@ export const Route = createFileRoute(
 
 export default function RefineStory() {
   const { storyId } = Route.useLoaderData();
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const [format, setFormat] = useState<StoryFormat>("vertical");
   const [isOpen, setIsOpen] = useState(false);
@@ -47,6 +57,28 @@ export default function RefineStory() {
   );
 
   const charCount = useEditorCharacterCount(storyId);
+
+  const { mutateAsync: generateSegments, isPending } = useMutation({
+    mutationFn: useConvexMutation(api.story.generateSegments),
+  });
+
+  const handleGenerateSegments = async () => {
+    try {
+      await generateSegments({
+        storyId,
+        format,
+      });
+      toast.success(t("toastSegmentsGenerationStarted"));
+      setIsOpen(false);
+      navigate({
+        to: "/stories/$storyId",
+        params: { storyId },
+      });
+    } catch (error) {
+      toast.error(t("toastSegmentsGenerationFailed"));
+      console.error("Generate segments failed:", error);
+    }
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -138,6 +170,23 @@ export default function RefineStory() {
                 {t("orientationWarning")}
               </p>
             </div>
+
+            <DialogFooter className="gap-2">
+              <DialogClose asChild>
+                <Button type="button" variant="outline" className="flex-1">
+                  {t("cancel")}
+                </Button>
+              </DialogClose>
+              <Button
+                type="button"
+                className="flex-1"
+                onClick={handleGenerateSegments}
+                disabled={isPending}
+              >
+                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isPending ? t("processing") : t("confirm")}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

@@ -69,11 +69,31 @@ export const storyStatusValidator = v.union(
 );
 export type StoryStatus = Infer<typeof storyStatusValidator>;
 
+export const storyGenerationStatusValidator = v.union(
+  v.literal("idle"),
+  v.literal("processing"),
+  v.literal("completed"),
+  v.literal("error"),
+);
+export type StoryGenerationStatus = Infer<
+  typeof storyGenerationStatusValidator
+>;
+
 export const storyFormatValidator = v.union(
   v.literal("vertical"),
   v.literal("horizontal"),
 );
 export type StoryFormat = Infer<typeof storyFormatValidator>;
+
+export const IMAGE_VERSION_SOURCES = [
+  "ai_generated",
+  "user_uploaded",
+  "ai_edited",
+] as const;
+export const imageVersionSourceValidator = v.union(
+  ...IMAGE_VERSION_SOURCES.map((s) => v.literal(s)),
+);
+export type ImageVersionSource = Infer<typeof imageVersionSourceValidator>;
 
 const schema = defineSchema({
   ...authTables,
@@ -128,11 +148,35 @@ const schema = defineSchema({
     title: v.string(),
     script: v.string(),
     status: storyStatusValidator,
+    generationStatus: v.optional(storyGenerationStatusValidator),
     format: v.optional(storyFormatValidator),
+    context: v.optional(v.string()),
+    generationId: v.optional(v.string()),
+    collectionId: v.optional(v.id("collections")),
+    stylePrompt: v.optional(v.string()),
   })
     .index("userId", ["userId"])
     .index("by_user_status", ["userId", "status"])
     .searchIndex("search_story", { searchField: "script" }),
+  segments: defineTable({
+    storyId: v.id("story"),
+    text: v.string(),
+    order: v.number(),
+    isGenerating: v.boolean(),
+    selectedVersionId: v.optional(v.id("imageVersions")),
+    error: v.optional(v.string()),
+    isAnalyzingText: v.optional(v.boolean()),
+  })
+    .index("by_story", ["storyId"])
+    .index("by_story_order", ["storyId", "order"]),
+  imageVersions: defineTable({
+    segmentId: v.id("segments"),
+    userId: v.id("users"),
+    prompt: v.optional(v.string()),
+    image: v.id("_storage"),
+    previewImage: v.id("_storage"),
+    source: imageVersionSourceValidator,
+  }).index("by_segment", ["segmentId"]),
 });
 
 export default schema;
