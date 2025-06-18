@@ -1,4 +1,10 @@
 {
   "title": "Create your App",
-  "description": "Build your app on top of Convex SaaS, explore the documentation and start your journey."
+  "description": "Build your app on top of Convex SaaS, explore the documentation and start your journey.",
+  "credits": "{{count}} credits",
+  "buyMore": "Buy more",
+  "navSettings": "Settings",
+  "navTheme": "Theme",
+  "navLanguage": "Language",
+  "navLogOut": "Log Out"
 }

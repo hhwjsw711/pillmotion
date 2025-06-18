@@ -2,6 +2,25 @@ import { defineSchema, defineTable } from "convex/server";
 import { authTables } from "@convex-dev/auth/server";
 import { v, Infer } from "convex/values";
 
+export const CREDIT_COSTS = {
+  CHAT_COMPLETION: 1,
+  IMAGE_GENERATION: 10,
+  VIDEO_GENERATION: 100,
+} as const;
+export const creditCostValidator = v.union(
+  v.literal(CREDIT_COSTS.CHAT_COMPLETION),
+  v.literal(CREDIT_COSTS.IMAGE_GENERATION),
+  v.literal(CREDIT_COSTS.VIDEO_GENERATION),
+);
+export type CreditCost = Infer<typeof creditCostValidator>;
+
+export const priceIdValidator = v.union(
+  v.literal("small"),
+  v.literal("medium"),
+  v.literal("large"),
+);
+export type PriceId = Infer<typeof priceIdValidator>;
+
 export const CURRENCIES = {
   USD: "usd",
   EUR: "eur",
@@ -54,6 +73,7 @@ const schema = defineSchema({
     phoneVerificationTime: v.optional(v.number()),
     isAnonymous: v.optional(v.boolean()),
     customerId: v.optional(v.string()),
+    credits: v.optional(v.number()),
   })
     .index("email", ["email"])
     .index("customerId", ["customerId"]),

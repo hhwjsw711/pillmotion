@@ -1,7 +1,4 @@
-import {
-  Settings,
-  LogOut,
-} from "lucide-react";
+import { Settings, LogOut } from "lucide-react";
 import { cn, useSignOut } from "@/utils/misc";
 import { ThemeSwitcher } from "@/ui/theme-switcher";
 import { LanguageSwitcher } from "@/ui/language-switcher";
@@ -19,11 +16,14 @@ import { Route as DashboardRoute } from "@/routes/_app/_auth/dashboard/_layout.i
 import { Route as SettingsRoute } from "@/routes/_app/_auth/dashboard/_layout.settings.index";
 import { Route as BillingSettingsRoute } from "@/routes/_app/_auth/dashboard/_layout.settings.billing";
 import { User } from "~/types";
+import { Badge } from "@/ui/badge";
+import { useTranslation } from "react-i18next";
 
 export function Navigation({ user }: { user: User }) {
   const signOut = useSignOut();
   const matchRoute = useMatchRoute();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const isDashboardPath = matchRoute({ to: DashboardRoute.fullPath });
   const isSettingsPath = matchRoute({ to: SettingsRoute.fullPath });
   const isBillingPath = matchRoute({ to: BillingSettingsRoute.fullPath });
@@ -51,6 +51,22 @@ export function Navigation({ user }: { user: User }) {
         </div>
 
         <div className="flex h-10 items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="secondary"
+              className="h-8 px-3 py-1.5 text-xs font-medium"
+            >
+              {t("credits", { count: user.credits })}
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              className="h-8 text-xs font-medium"
+            >
+              <Link to={BillingSettingsRoute.fullPath}>{t("buyMore")}</Link>
+            </Button>
+          </div>
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="h-8 w-8 rounded-full">
@@ -81,7 +97,7 @@ export function Navigation({ user }: { user: User }) {
                 onClick={() => navigate({ to: SettingsRoute.fullPath })}
               >
                 <span className="text-sm text-primary/60 group-hover:text-primary group-focus:text-primary">
-                  Settings
+                  {t("navSettings")}
                 </span>
                 <Settings className="h-[18px] w-[18px] stroke-[1.5px] text-primary/60 group-hover:text-primary group-focus:text-primary" />
               </DropdownMenuItem>
@@ -92,7 +108,7 @@ export function Navigation({ user }: { user: User }) {
                 )}
               >
                 <span className="w-full text-sm text-primary/60 group-hover:text-primary group-focus:text-primary">
-                  Theme
+                  {t("navTheme")}
                 </span>
                 <ThemeSwitcher />
               </DropdownMenuItem>
@@ -103,7 +119,7 @@ export function Navigation({ user }: { user: User }) {
                 )}
               >
                 <span className="w-full text-sm text-primary/60 group-hover:text-primary group-focus:text-primary">
-                  Language
+                  {t("navLanguage")}
                 </span>
                 <LanguageSwitcher />
               </DropdownMenuItem>
@@ -115,7 +131,7 @@ export function Navigation({ user }: { user: User }) {
                 onClick={() => signOut()}
               >
                 <span className="text-sm text-primary/60 group-hover:text-primary group-focus:text-primary">
-                  Log Out
+                  {t("navLogOut")}
                 </span>
                 <LogOut className="h-[18px] w-[18px] stroke-[1.5px] text-primary/60 group-hover:text-primary group-focus:text-primary" />
               </DropdownMenuItem>

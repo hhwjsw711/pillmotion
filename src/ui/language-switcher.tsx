@@ -9,7 +9,7 @@ export function LanguageSwitcher() {
 
   const langs = [
     { text: "English", value: "en" },
-    { text: "Spanish", value: "es" },
+    { text: "中文", value: "zh" },
   ];
   const formatLanguage = (lng: string) => {
     return langs.find((lang) => lang.value === lng)?.text;
