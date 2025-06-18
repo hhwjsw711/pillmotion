@@ -24,7 +24,7 @@ if (!STRIPE_SECRET_KEY) {
 */
 
 export const stripe = new Stripe(STRIPE_SECRET_KEY || "", {
-  apiVersion: "2024-06-20",
+  apiVersion: "2025-05-28.basil",
   typescript: true,
 });
 
@@ -258,8 +258,8 @@ export const PREAUTH_createFreeStripeSubscription = internalAction({
       stripeSubscriptionId: stripeSubscription.id,
       status: stripeSubscription.status,
       interval: "year",
-      currentPeriodStart: stripeSubscription.current_period_start,
-      currentPeriodEnd: stripeSubscription.current_period_end,
+      currentPeriodStart: stripeSubscription.items.data[0].current_period_start,
+      currentPeriodEnd: stripeSubscription.items.data[0].current_period_end,
       cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
     });
 
