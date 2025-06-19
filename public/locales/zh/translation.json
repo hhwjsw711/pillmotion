@@ -1,6 +1,4 @@
 {
-  "title": "Pillmotion - AI 故事生成器",
-  "description": "使用 AI 驱动的视觉效果，将您的故事变为现实。从剧本到屏幕，轻松实现。",
   "credits": "{{count}} 积分",
   "buyMore": "购买积分",
   "navSettings": "设置",
@@ -162,5 +160,10 @@
   "unpublishStory": "取消发布",
   "toastStoryPublished": "故事已成功发布！",
   "toastStoryUnpublished": "故事已取消发布，并转为草稿。",
-  "toastStatusUpdateFailed": "状态更新失败"
+  "toastStatusUpdateFailed": "状态更新失败",
+  "archive": "归档",
+  "unarchive": "取消归档",
+  "storyArchivedSuccess": "故事已成功归档。",
+  "storyUnarchivedSuccess": "故事已成功取消归档并移至草稿。",
+  "storyStatusUpdateError": "更新故事状态失败。"
 }

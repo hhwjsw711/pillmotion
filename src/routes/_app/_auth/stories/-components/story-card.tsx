@@ -4,12 +4,20 @@ import { useNavigate } from "@tanstack/react-router";
 import { StatusBadge } from "./status-badge";
 import { StoryThumbnail } from "./story-thumbnail";
 import React from "react";
-import { MoreHorizontal, Trash2, Smartphone, Monitor } from "lucide-react";
+import {
+  MoreHorizontal,
+  Trash2,
+  Smartphone,
+  Monitor,
+  Archive,
+  ArchiveRestore,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/ui/dropdown-menu";
 import { api } from "~/convex/_generated/api";
 import { useQuery } from "convex/react";
@@ -37,16 +45,33 @@ interface StoryCardProps {
   story: StoryWithThumbnail;
   showDeleteButton?: boolean;
   onDelete?: (storyId: Id<"story">) => void;
+  onUpdateStatus?: (variables: {
+    storyId: Id<"story">;
+    status: Doc<"story">["status"];
+  }) => void;
+  isUpdatingStatus?: boolean;
 }
 
 export const StoryCard = React.memo(
-  ({ story, showDeleteButton = false, onDelete }: StoryCardProps) => {
+  ({
+    story,
+    showDeleteButton = false,
+    onDelete,
+    onUpdateStatus,
+    isUpdatingStatus = false,
+  }: StoryCardProps) => {
     const { t } = useTranslation();
     const navigate = useNavigate();
 
     const handleDelete = () => {
       if (onDelete) {
         onDelete(story._id);
+      }
+    };
+
+    const handleUpdateStatus = (status: Doc<"story">["status"]) => {
+      if (onUpdateStatus) {
+        onUpdateStatus({ storyId: story._id, status });
       }
     };
 
@@ -140,13 +165,33 @@ export const StoryCard = React.memo(
                   }}
                   align="end"
                 >
-                  <DropdownMenuItem
-                    className="text-red-500 focus:text-red-500 focus:bg-red-50/50 dark:focus:bg-red-900/20"
-                    onSelect={handleDelete}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    <span>{t("delete")}</span>
-                  </DropdownMenuItem>
+                  {story.status !== "archived" ? (
+                    <DropdownMenuItem
+                      disabled={isUpdatingStatus}
+                      onSelect={() => handleUpdateStatus("archived")}
+                    >
+                      <Archive className="mr-2 h-4 w-4" />
+                      <span>{t("archive")}</span>
+                    </DropdownMenuItem>
+                  ) : (
+                    <>
+                      <DropdownMenuItem
+                        disabled={isUpdatingStatus}
+                        onSelect={() => handleUpdateStatus("draft")}
+                      >
+                        <ArchiveRestore className="mr-2 h-4 w-4" />
+                        <span>{t("unarchive")}</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-red-500 focus:text-red-500 focus:bg-red-50/50 dark:focus:bg-red-900/20"
+                        onSelect={handleDelete}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        <span>{t("delete")}</span>
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}

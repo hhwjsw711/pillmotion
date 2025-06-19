@@ -1,6 +1,4 @@
 {
-  "title": "Pillmotion - AI Story Generator",
-  "description": "Bring your stories to life with AI-powered visuals. From script to screen, effortlessly.",
   "credits": "{{count}} credits",
   "buyMore": "Buy More",
   "navSettings": "Settings",
@@ -162,5 +160,10 @@
   "unpublishStory": "Unpublish Story",
   "toastStoryPublished": "Story published successfully!",
   "toastStoryUnpublished": "Story has been unpublished and set back to a draft.",
-  "toastStatusUpdateFailed": "Failed to update status"
+  "toastStatusUpdateFailed": "Failed to update status",
+  "archive": "Archive",
+  "unarchive": "Unarchive",
+  "storyArchivedSuccess": "Story successfully archived.",
+  "storyUnarchivedSuccess": "Story successfully unarchived and moved to drafts.",
+  "storyStatusUpdateError": "Failed to update story status."
 }

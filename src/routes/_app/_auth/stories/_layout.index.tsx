@@ -51,6 +51,26 @@ export function StoriesPage() {
     });
 
   const deleteStoryMutation = useConvexMutation(api.story.deleteStory);
+  const updateStatusMutation = useConvexMutation(api.story.updateStatus);
+
+  const { mutate: updateStatus, isPending: isUpdatingStatus } = useMutation({
+    mutationFn: (variables: {
+      storyId: Id<"story">;
+      status: Doc<"story">["status"];
+    }) => updateStatusMutation(variables),
+    onSuccess: (_, variables) => {
+      if (variables.status === "archived") {
+        toast.success(t("storyArchivedSuccess"));
+      } else if (variables.status === "draft") {
+        toast.success(t("storyUnarchivedSuccess"));
+      }
+    },
+    onError: (error) => {
+      toast.error(t("storyStatusUpdateError"), {
+        description: error instanceof Error ? error.message : t("unknownError"),
+      });
+    },
+  });
 
   const { mutate: deleteStory, isPending: isDeleting } = useMutation({
     mutationFn: async (storyId: Id<"story">) => {
@@ -170,6 +190,8 @@ export function StoriesPage() {
             story={story}
             showDeleteButton={true}
             onDelete={handleDeleteRequest}
+            onUpdateStatus={updateStatus}
+            isUpdatingStatus={isUpdatingStatus}
           />
         ))}
       </div>
