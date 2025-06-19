@@ -152,7 +152,6 @@ const schema = defineSchema({
     format: v.optional(storyFormatValidator),
     context: v.optional(v.string()),
     generationId: v.optional(v.string()),
-    collectionId: v.optional(v.id("collections")),
     stylePrompt: v.optional(v.string()),
   })
     .index("userId", ["userId"])

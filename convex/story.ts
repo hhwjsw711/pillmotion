@@ -12,6 +12,7 @@ import { auth } from "./auth";
 import { ConvexError, v } from "convex/values";
 import {
   storyFormatValidator,
+  storyStatusValidator,
   CREDIT_COSTS,
   storyGenerationStatusValidator,
 } from "./schema";
@@ -55,6 +56,35 @@ export const updateStoryTitle = mutation({
   },
 });
 
+export const list = query({
+  args: {
+    status: v.optional(storyStatusValidator),
+  },
+  handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+    const { status } = args;
+    let query;
+    if (status) {
+      // Now, TypeScript knows for sure that 'status' inside this block is not undefined.
+      query = ctx.db
+        .query("story")
+        .withIndex("by_user_status", (q) =>
+          q.eq("userId", userId).eq("status", status),
+        );
+    } else {
+      // In the 'else' block, we handle the case where no status is provided.
+      query = ctx.db
+        .query("story")
+        .withIndex("userId", (q) => q.eq("userId", userId));
+    }
+
+    return query.order("desc").collect();
+  },
+});
+
 export const createStory = mutation({
   args: {
     title: v.string(),
@@ -72,6 +102,7 @@ export const createStory = mutation({
       title: args.title,
       script: args.script ?? "",
       status: "draft",
+      generationStatus: "idle",
     });
 
     return storyId;
@@ -121,6 +152,47 @@ export const updateStylePrompt = mutation({
       stylePrompt: args.stylePrompt,
       updatedAt: Date.now(),
     });
+  },
+});
+
+export const deleteStory = mutation({
+  args: { storyId: v.id("story") },
+  handler: async (ctx, args) => {
+    // 1. Verify ownership. This will throw an error if the user is not the owner.
+    await verifyStoryOwnerHelper(ctx, args.storyId);
+
+    // 2. Get all segments for the story using the correct index name "by_story".
+    const segments = await ctx.db
+      .query("segments")
+      .withIndex("by_story", (q) => q.eq("storyId", args.storyId))
+      .collect();
+
+    // 3. Iterate through segments to delete related data
+    for (const segment of segments) {
+      // 3a. Get all image versions for the segment using the correct index name "by_segment".
+      const imageVersions = await ctx.db
+        .query("imageVersions")
+        .withIndex("by_segment", (q) => q.eq("segmentId", segment._id))
+        .collect();
+
+      // 3b. Delete associated files from storage and the image version documents
+      // using the correct field names "image" and "previewImage".
+      for (const version of imageVersions) {
+        if (version.image) {
+          await ctx.storage.delete(version.image);
+        }
+        if (version.previewImage) {
+          await ctx.storage.delete(version.previewImage);
+        }
+        await ctx.db.delete(version._id);
+      }
+
+      // 3c. Delete the segment document itself
+      await ctx.db.delete(segment._id);
+    }
+
+    // 4. Finally, delete the story document
+    await ctx.db.delete(args.storyId);
   },
 });
 
@@ -267,12 +339,9 @@ export const generateStoryOrchestrator = internalAction({
 
       const results = await Promise.all(segmentGenerationPromises);
 
-      const currentStory = await ctx.runQuery(
-        internal.story.getStoryInternal,
-        {
-          storyId,
-        },
-      );
+      const currentStory = await ctx.runQuery(internal.story.getStoryInternal, {
+        storyId,
+      });
 
       if (currentStory?.generationId !== generationId) {
         // A new generation task has been started. This task is now obsolete.

@@ -14,6 +14,7 @@ import { buttonVariants } from "@/ui/button-util";
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
 import { Route as DashboardRoute } from "@/routes/_app/_auth/dashboard/_layout.index";
 import { Route as GenerateRoute } from "@/routes/_app/_auth/generate/_layout.index";
+import { Route as StoriesRoute } from "@/routes/_app/_auth/stories/_layout.index";
 import { Route as SettingsRoute } from "@/routes/_app/_auth/dashboard/_layout.settings.index";
 import { Route as BillingSettingsRoute } from "@/routes/_app/_auth/dashboard/_layout.settings.billing";
 import { User } from "~/types";
@@ -27,6 +28,7 @@ export function Navigation({ user }: { user: User }) {
   const { t } = useTranslation();
   const isDashboardPath = matchRoute({ to: DashboardRoute.fullPath });
   const isGeneratePath = matchRoute({ to: GenerateRoute.fullPath });
+  const isStoriesPath = matchRoute({ to: StoriesRoute.fullPath });
   const isSettingsPath = matchRoute({ to: SettingsRoute.fullPath });
   const isBillingPath = matchRoute({ to: BillingSettingsRoute.fullPath });
 
@@ -171,6 +173,21 @@ export function Navigation({ user }: { user: User }) {
             )}
           >
             Generate
+          </Link>
+        </div>
+        <div
+          className={cn(
+            `flex h-12 items-center border-b-2`,
+            isStoriesPath ? "border-primary" : "border-transparent",
+          )}
+        >
+          <Link
+            to={StoriesRoute.fullPath}
+            className={cn(
+              `${buttonVariants({ variant: "ghost", size: "sm" })} text-primary/80`,
+            )}
+          >
+            Stories
           </Link>
         </div>
         <div
