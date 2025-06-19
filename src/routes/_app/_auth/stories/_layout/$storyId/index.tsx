@@ -15,6 +15,8 @@ import {
   Loader2,
   FileText,
   Palette,
+  UploadCloud, // <-- Add UploadCloud icon
+  Undo2, // <-- Add Undo2 icon
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -117,6 +119,28 @@ function SortableSegmentItem({
 
 function StorySection({ story }: { story: Doc<"story"> }) {
   const { t } = useTranslation();
+  const updateStatusMutation = useConvexMutation(api.story.updateStatus);
+
+  const { mutate: updateStatus, isPending: isUpdatingStatus } = useMutation({
+    mutationFn: async (status: Doc<"story">["status"]) => {
+      await updateStatusMutation({ storyId: story._id, status });
+    },
+    onSuccess: (_, variables) => {
+      toast.success(
+        t(
+          variables === "published"
+            ? "toastStoryPublished"
+            : "toastStoryUnpublished",
+        ),
+      );
+    },
+    onError: (err) => {
+      toast.error(t("toastStatusUpdateFailed"), {
+        description: err instanceof Error ? err.message : t("unknownError"),
+      });
+    },
+  });
+
   return (
     <div className="space-y-6">
       <div className="space-y-4">
@@ -146,8 +170,12 @@ function StorySection({ story }: { story: Doc<"story"> }) {
           <div className="flex items-center gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline">
-                  <Settings className="mr-2 h-4 w-4" />
+                <Button variant="outline" disabled={isUpdatingStatus}>
+                  {isUpdatingStatus ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Settings className="mr-2 h-4 w-4" />
+                  )}
                   {t("storySettings")}
                 </Button>
               </DropdownMenuTrigger>
@@ -170,6 +198,20 @@ function StorySection({ story }: { story: Doc<"story"> }) {
                     <span>{t("styleSettings")}</span>
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+
+                {/* Dynamically show Publish or Unpublish button */}
+                {story.status !== "published" ? (
+                  <DropdownMenuItem onSelect={() => updateStatus("published")}>
+                    <UploadCloud className="mr-2 h-4 w-4" />
+                    <span>{t("publishStory")}</span>
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onSelect={() => updateStatus("draft")}>
+                    <Undo2 className="mr-2 h-4 w-4" />
+                    <span>{t("unpublishStory")}</span>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem disabled>
                   <Clapperboard className="mr-2 h-4 w-4" />

@@ -20,8 +20,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/ui/alert-dialog";
-import { Id } from "~/convex/_generated/dataModel";
+import { Id, Doc } from "~/convex/_generated/dataModel";
 import { useTranslation } from "react-i18next";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
+
+type StoryStatusTab = Doc<"story">["status"] | "all";
 
 export const Route = createFileRoute("/_app/_auth/stories/_layout/")({
   component: StoriesPage,
@@ -29,7 +32,10 @@ export const Route = createFileRoute("/_app/_auth/stories/_layout/")({
 
 export function StoriesPage() {
   const { t } = useTranslation();
-  const stories = useQuery(api.story.list, {});
+  const [activeTab, setActiveTab] = React.useState<StoryStatusTab>("all");
+  const stories = useQuery(api.story.list, {
+    status: activeTab === "all" ? undefined : activeTab,
+  });
   const navigate = useNavigate();
   const [storyToDelete, setStoryToDelete] = React.useState<Id<"story"> | null>(
     null,
@@ -95,8 +101,8 @@ export function StoriesPage() {
     }
   };
 
-  const handleDeleteRequest = (storyId: string) => {
-    setStoryToDelete(storyId as Id<"story">);
+  const handleDeleteRequest = (storyId: Id<"story">) => {
+    setStoryToDelete(storyId);
   };
 
   const confirmDelete = () => {
@@ -105,33 +111,20 @@ export function StoriesPage() {
     }
   };
 
-  return (
-    <>
-      <div className="container mx-auto max-w-7xl px-4 pt-8 pb-12">
-        <header className="mb-8 flex items-center justify-between">
-          <h1 className="text-3xl font-bold">{t("myStories")}</h1>
-          <Button
-            onClick={() => setIsCreateDialogOpen(true)}
-            disabled={isPendingCreation}
-          >
-            {isPendingCreation ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <PlusCircle className="mr-2 h-4 w-4" />
-            )}
-            {t("createNewStory")}
-          </Button>
-        </header>
+  const renderContent = () => {
+    if (stories === undefined) {
+      return (
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <StoryCardSkeleton key={index} />
+          ))}
+        </div>
+      );
+    }
 
-        {stories === undefined && (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {Array.from({ length: 8 }).map((_, index) => (
-              <StoryCardSkeleton key={index} />
-            ))}
-          </div>
-        )}
-
-        {stories && stories.length === 0 && (
+    if (stories.length === 0) {
+      if (activeTab === "all") {
+        return (
           <div className="flex h-64 flex-col items-center justify-center rounded-lg border-2 border-dashed">
             <Clapperboard className="mb-4 h-16 w-16 text-muted-foreground" />
             <h2 className="text-xl font-semibold">
@@ -153,20 +146,69 @@ export function StoriesPage() {
               {t("startYourFirstStory")}
             </Button>
           </div>
-        )}
-
-        {stories && stories.length > 0 && (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {stories.map((story) => (
-              <StoryCard
-                key={story._id}
-                story={story}
-                showDeleteButton={true}
-                onDelete={handleDeleteRequest}
-              />
-            ))}
+        );
+      } else {
+        return (
+          <div className="flex h-64 flex-col items-center justify-center rounded-lg border-2 border-dashed">
+            <Clapperboard className="mb-4 h-16 w-16 text-muted-foreground" />
+            <h2 className="text-xl font-semibold">
+              {t("noStoriesInThisCategory")}
+            </h2>
+            <p className="mt-1 text-muted-foreground">
+              {t("tryDifferentCategoryOrCreate")}
+            </p>
           </div>
-        )}
+        );
+      }
+    }
+
+    return (
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {stories.map((story) => (
+          <StoryCard
+            key={story._id}
+            story={story}
+            showDeleteButton={true}
+            onDelete={handleDeleteRequest}
+          />
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <div className="container mx-auto max-w-7xl px-4 pt-8 pb-12">
+        <header className="mb-8 flex items-center justify-between">
+          <h1 className="text-3xl font-bold">{t("myStories")}</h1>
+          <Button
+            onClick={() => setIsCreateDialogOpen(true)}
+            disabled={isPendingCreation}
+          >
+            {isPendingCreation ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <PlusCircle className="mr-2 h-4 w-4" />
+            )}
+            {t("createNewStory")}
+          </Button>
+        </header>
+
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as StoryStatusTab)}
+          className="w-full"
+        >
+          <TabsList className="grid w-full grid-cols-4 sm:max-w-md">
+            <TabsTrigger value="all">{t("statusAll")}</TabsTrigger>
+            <TabsTrigger value="draft">{t("statusDraft")}</TabsTrigger>
+            <TabsTrigger value="published">{t("statusPublished")}</TabsTrigger>
+            <TabsTrigger value="archived">{t("statusArchived")}</TabsTrigger>
+          </TabsList>
+          <TabsContent value={activeTab} className="mt-6">
+            {renderContent()}
+          </TabsContent>
+        </Tabs>
       </div>
       <AlertDialog
         open={!!storyToDelete}

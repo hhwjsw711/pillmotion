@@ -1,29 +1,26 @@
-import { useQuery } from "convex/react";
-import { api } from "~/convex/_generated/api";
-import { Id } from "~/convex/_generated/dataModel";
 import { Clapperboard, Loader2 } from "lucide-react";
 import { cn } from "@/utils/misc";
 import React from "react";
 import { useTranslation } from "react-i18next";
 
 interface StoryThumbnailProps {
-  storyId: Id<"story">;
+  thumbnailUrl: string | null;
   className?: string;
 }
 
-export function StoryThumbnail({ storyId, className }: StoryThumbnailProps) {
+export function StoryThumbnail({
+  thumbnailUrl,
+  className,
+}: StoryThumbnailProps) {
   const { t } = useTranslation();
-  const segments = useQuery(api.segments.getByStory, { storyId });
-  const firstSegment = segments?.[0];
-  const thumbnailUrl = useQuery(
-    api.files.getFileUrl,
-    firstSegment?.selectedVersion?.previewImage
-      ? { storageId: firstSegment.selectedVersion.previewImage }
-      : "skip",
-  );
-
   const [isImageLoading, setIsImageLoading] = React.useState(true);
   const [imageError, setImageError] = React.useState(false);
+
+  // Reset states when thumbnailUrl changes
+  React.useEffect(() => {
+    setIsImageLoading(true);
+    setImageError(false);
+  }, [thumbnailUrl]);
 
   return (
     <div

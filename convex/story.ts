@@ -56,6 +56,55 @@ export const updateStoryTitle = mutation({
   },
 });
 
+/**
+ * NEW: A public query to list all published stories from all users.
+ * This does not require authentication.
+ */
+export const listPublic = query({
+  handler: async (ctx) => {
+    const stories = await ctx.db
+      .query("story")
+      .withIndex("by_status", (q) => q.eq("status", "published"))
+      .order("desc")
+      .collect();
+
+    // As before, we augment stories with their thumbnail URLs.
+    const storiesWithThumbnails = await Promise.all(
+      stories.map(async (story) => {
+        const firstSegment = await ctx.db
+          .query("segments")
+          .withIndex("by_story_order", (q) => q.eq("storyId", story._id))
+          .order("asc")
+          .first();
+
+        let thumbnailUrl: string | null = null;
+        if (firstSegment?.selectedVersionId) {
+          const selectedVersion = await ctx.db.get(
+            firstSegment.selectedVersionId,
+          );
+          if (selectedVersion?.previewImage) {
+            try {
+              thumbnailUrl = await ctx.storage.getUrl(
+                selectedVersion.previewImage,
+              );
+            } catch (error) {
+              console.error(
+                `Failed to get URL for storage ID ${selectedVersion.previewImage}:`,
+                error,
+              );
+            }
+          }
+        }
+        return {
+          ...story,
+          thumbnailUrl,
+        };
+      }),
+    );
+    return storiesWithThumbnails;
+  },
+});
+
 export const list = query({
   args: {
     status: v.optional(storyStatusValidator),
@@ -65,23 +114,61 @@ export const list = query({
     if (!userId) {
       return [];
     }
-    const { status } = args;
-    let query;
-    if (status) {
-      // Now, TypeScript knows for sure that 'status' inside this block is not undefined.
-      query = ctx.db
+
+    let queryBuilder;
+    if (args.status) {
+      queryBuilder = ctx.db
         .query("story")
         .withIndex("by_user_status", (q) =>
-          q.eq("userId", userId).eq("status", status),
+          q.eq("userId", userId).eq("status", args.status!),
         );
     } else {
-      // In the 'else' block, we handle the case where no status is provided.
-      query = ctx.db
+      queryBuilder = ctx.db
         .query("story")
         .withIndex("userId", (q) => q.eq("userId", userId));
     }
 
-    return query.order("desc").collect();
+    const stories = await queryBuilder.order("desc").collect();
+
+    // Augment each story with its thumbnail URL to avoid N+1 queries on the client.
+    const storiesWithThumbnails = await Promise.all(
+      stories.map(async (story) => {
+        // Find the first segment of the story.
+        const firstSegment = await ctx.db
+          .query("segments")
+          .withIndex("by_story_order", (q) => q.eq("storyId", story._id))
+          .order("asc")
+          .first();
+
+        let thumbnailUrl: string | null = null;
+        if (firstSegment?.selectedVersionId) {
+          // Use the ID to get the full imageVersion document.
+          const selectedVersion = await ctx.db.get(
+            firstSegment.selectedVersionId,
+          );
+
+          if (selectedVersion?.previewImage) {
+            try {
+              thumbnailUrl = await ctx.storage.getUrl(
+                selectedVersion.previewImage,
+              );
+            } catch (error) {
+              console.error(
+                `Failed to get URL for storage ID ${selectedVersion.previewImage}:`,
+                error,
+              );
+            }
+          }
+        }
+
+        // We explicitly type the return object to match the expected client-side structure.
+        return {
+          ...story,
+          thumbnailUrl,
+        };
+      }),
+    );
+    return storiesWithThumbnails;
   },
 });
 
@@ -136,8 +223,43 @@ export const initializeEditor = mutation({
 export const getStory = query({
   args: { storyId: v.id("story") },
   handler: async (ctx, args) => {
-    const { story } = await verifyStoryOwnerHelper(ctx, args.storyId);
-    return story;
+    // First, get the story without any auth checks.
+    const story = await ctx.db.get(args.storyId);
+    if (!story) {
+      throw new ConvexError("Story not found.");
+    }
+
+    // If the story is published, anyone can view it.
+    if (story.status === "published") {
+      return story;
+    }
+
+    // For any other status (draft, archived, etc.), we MUST verify ownership.
+    const { story: verifiedStory } = await verifyStoryOwnerHelper(
+      ctx,
+      args.storyId,
+    );
+    return verifiedStory;
+  },
+});
+
+/**
+ * NEW: A mutation to update the status of a story (e.g., to 'published').
+ */
+export const updateStatus = mutation({
+  args: {
+    storyId: v.id("story"),
+    status: storyStatusValidator, // Use the validator from schema.ts
+  },
+  handler: async (ctx, args) => {
+    // First, verify the user owns the story.
+    await verifyStoryOwnerHelper(ctx, args.storyId);
+
+    // Now, patch the document with the new status.
+    await ctx.db.patch(args.storyId, {
+      status: args.status,
+      updatedAt: Date.now(), // Also update the 'updatedAt' timestamp.
+    });
   },
 });
 

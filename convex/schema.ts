@@ -156,6 +156,7 @@ const schema = defineSchema({
   })
     .index("userId", ["userId"])
     .index("by_user_status", ["userId", "status"])
+    .index("by_status", ["status"]) // <-- 添加这个新的索引
     .searchIndex("search_story", { searchField: "script" }),
   segments: defineTable({
     storyId: v.id("story"),

@@ -36,10 +36,9 @@ export function CreateStoryDialog({
   };
 
   const handleCreateBlank = () => {
-    // Reset fields in case user typed something then changed their mind
-    setTitle("");
+    // Reset only the script, but keep the title if the user has entered one.
     setScript("");
-    onCreateStory({});
+    onCreateStory({ title: title || undefined });
   };
 
   return (

@@ -1,8 +1,9 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { TextEditor, useEditorCharacterCount } from "./-components/text-editor";
 import { Id } from "~/convex/_generated/dataModel";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { convexQuery, useConvexMutation } from "@convex-dev/react-query";
+import { useQuery } from "convex/react"; // Changed from @tanstack/react-query
+import { useMutation } from "@tanstack/react-query";
+import { useConvexMutation } from "@convex-dev/react-query";
 import { api } from "~/convex/_generated/api";
 import { EditableTitle } from "./-components/editable-title";
 import { Button } from "@/ui/button";
@@ -22,7 +23,7 @@ import {
   Loader2,
   Sparkles,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react"; // Added useEffect
 import { toast } from "sonner";
 import { StoryFormat } from "~/convex/schema";
 import {
@@ -32,6 +33,7 @@ import {
   TooltipTrigger,
 } from "@/ui/tooltip";
 import { useTranslation } from "react-i18next";
+import { Spinner } from "@/ui/spinner";
 
 export const Route = createFileRoute(
   "/_app/_auth/stories/_layout/$storyId/refine",
@@ -50,17 +52,22 @@ export default function RefineStory() {
   const [format, setFormat] = useState<StoryFormat>("vertical");
   const [isOpen, setIsOpen] = useState(false);
 
-  const { data: story } = useQuery(
-    convexQuery(api.story.getStory, {
-      storyId,
-    }),
-  );
-
-  const charCount = useEditorCharacterCount(storyId);
+  // Use the standard convex hook for consistency and graceful null handling.
+  const story = useQuery(api.story.getStory, { storyId });
 
   const { mutateAsync: generateSegments, isPending } = useMutation({
     mutationFn: useConvexMutation(api.story.generateSegments),
   });
+
+  // Add this effect to handle the case where the story is deleted.
+  useEffect(() => {
+    if (story === null) {
+      toast.error(t("storyNotFoundOrDeleted"));
+      navigate({ to: "/stories" });
+    }
+  }, [story, navigate, t]);
+
+  const charCount = useEditorCharacterCount(storyId);
 
   const handleGenerateSegments = async () => {
     try {
@@ -80,6 +87,15 @@ export default function RefineStory() {
     }
   };
 
+  // Render a spinner while loading or before navigating away.
+  if (story === undefined || story === null) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col">
       {/* Centered container for the main content */}
@@ -94,17 +110,16 @@ export default function RefineStory() {
               </Link>
             </Button>
           </div>
-          {story && (
-            <div className="space-y-2">
-              <EditableTitle storyId={storyId} initialTitle={story.title} />
-              <div className="text-muted-foreground text-xs">
-                <span>
-                  {t("lastUpdated")}{" "}
-                  {new Date(story.updatedAt).toLocaleString()}
-                </span>
-              </div>
+          {/* We can safely access story properties now */}
+          <div className="space-y-2">
+            <EditableTitle storyId={storyId} initialTitle={story.title} />
+            <div className="text-muted-foreground text-xs">
+              <span>
+                {t("lastUpdated")}{" "}
+                {new Date(story.updatedAt).toLocaleString()}
+              </span>
             </div>
-          )}
+          </div>
         </header>
 
         {/* Editor Section */}
