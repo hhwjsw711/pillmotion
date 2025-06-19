@@ -13,6 +13,8 @@ import { createFileRoute } from '@tanstack/react-router'
 // Import Routes
 
 import { Route as rootRoute } from './routes/__root'
+import { Route as TermsImport } from './routes/terms'
+import { Route as PolicyImport } from './routes/policy'
 import { Route as AppImport } from './routes/_app'
 import { Route as IndexImport } from './routes/index'
 import { Route as AppAuthImport } from './routes/_app/_auth'
@@ -45,6 +47,16 @@ const AppAuthGenerateImport = createFileRoute('/_app/_auth/generate')()
 const AppAuthDashboardImport = createFileRoute('/_app/_auth/dashboard')()
 
 // Create/Update Routes
+
+const TermsRoute = TermsImport.update({
+  path: '/terms',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const PolicyRoute = PolicyImport.update({
+  path: '/policy',
+  getParentRoute: () => rootRoute,
+} as any)
 
 const AppRoute = AppImport.update({
   id: '/_app',
@@ -210,6 +222,20 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: ''
       preLoaderRoute: typeof AppImport
+      parentRoute: typeof rootRoute
+    }
+    '/policy': {
+      id: '/policy'
+      path: '/policy'
+      fullPath: '/policy'
+      preLoaderRoute: typeof PolicyImport
+      parentRoute: typeof rootRoute
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsImport
       parentRoute: typeof rootRoute
     }
     '/_app/_auth': {
@@ -436,6 +462,8 @@ export const routeTree = rootRoute.addChildren({
       }),
     }),
   }),
+  PolicyRoute,
+  TermsRoute,
 })
 
 /* prettier-ignore-end */
@@ -447,7 +475,9 @@ export const routeTree = rootRoute.addChildren({
       "filePath": "__root.tsx",
       "children": [
         "/",
-        "/_app"
+        "/_app",
+        "/policy",
+        "/terms"
       ]
     },
     "/": {
@@ -459,6 +489,12 @@ export const routeTree = rootRoute.addChildren({
         "/_app/_auth",
         "/_app/login"
       ]
+    },
+    "/policy": {
+      "filePath": "policy.tsx"
+    },
+    "/terms": {
+      "filePath": "terms.tsx"
     },
     "/_app/_auth": {
       "filePath": "_app/_auth.tsx",

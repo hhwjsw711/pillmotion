@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
@@ -196,8 +196,13 @@ function LoginForm({ onSubmit }: { onSubmit: (email: string) => void }) {
 
       <p className="px-12 text-center text-sm font-normal leading-normal text-primary/60">
         By clicking continue, you agree to our{" "}
-        <a className="underline hover:text-primary">Terms of Service</a> and{" "}
-        <a className="underline hover:text-primary">Privacy Policy.</a>
+        <Link to="/terms" className="underline hover:text-primary">
+          Terms of Service
+        </Link>{" "}
+        and{" "}
+        <Link to="/policy" className="underline hover:text-primary">
+          Privacy Policy.
+        </Link>
       </p>
     </div>
   );
