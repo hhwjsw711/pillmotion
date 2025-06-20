@@ -9,10 +9,7 @@ import { ImageUploader } from "../../-components/image-uploader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { ImageVersionSource } from "~/convex/schema";
 import { useTranslation } from "react-i18next";
-import {
-  useSegmentEditor,
-  VersionWithUrl,
-} from "@/hooks/useSegmentEditor";
+import { useSegmentEditor, VersionWithUrl } from "@/hooks/useSegmentEditor";
 import { Spinner } from "@/ui/spinner";
 
 export const Route = createFileRoute(
@@ -86,6 +83,7 @@ export default function SegmentEditor() {
     versions,
     selectedVersion,
     imageUrl,
+    videoClipUrl,
     promptText,
     setPromptText,
     tuningPrompt,
@@ -132,7 +130,16 @@ export default function SegmentEditor() {
         <div className="grid grid-cols-1 md:grid-cols-[1fr,320px] gap-8 items-start">
           <div className="space-y-4">
             <div className="aspect-video w-full overflow-hidden rounded-lg border bg-muted flex items-center justify-center">
-              {imageUrl && !segment.isGenerating ? (
+              {videoClipUrl ? (
+                <video
+                  src={videoClipUrl}
+                  className="h-full w-full object-contain"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                />
+              ) : imageUrl && !segment.isGenerating ? (
                 <img
                   src={imageUrl}
                   alt={t("imageAltScene")}

@@ -1,53 +1,54 @@
-import { useState, useEffect, useMemo } from "react";
-import { useQuery } from "convex/react";
-import { useMutation } from "@tanstack/react-query";
-import { useConvexMutation } from "@convex-dev/react-query";
+import { useState, useMemo, useEffect } from "react";
+import { useQuery, useMutation as useTanstackMutation } from "@tanstack/react-query";
+import { useConvexMutation, convexQuery } from "@convex-dev/react-query";
 import { api } from "~/convex/_generated/api";
 import { Id, Doc } from "~/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
+// This type definition now includes the full image URL.
 export type VersionWithUrl = Doc<"imageVersions"> & {
+  imageUrl: string | null;
   previewImageUrl: string | null;
 };
 
-/**
- * A comprehensive hook to manage the state and logic for the SegmentEditor page.
- * It handles data fetching, form state, and all image-related mutations.
- *
- * @param segmentId The ID of the segment being edited.
- * @returns All the state and handlers needed by the SegmentEditor component.
- */
 export function useSegmentEditor(segmentId: Id<"segments">) {
   const { t } = useTranslation();
 
-  // 1. DATA FETCHING
-  const segment = useQuery(api.segments.get, { id: segmentId });
-  const versions = useQuery(api.imageVersions.getBySegment, { segmentId });
-  const selectedVersion = useMemo(
-    () => versions?.find((v) => v._id === segment?.selectedVersionId),
-    [versions, segment],
-  );
-  const imageUrl = useQuery(
-    api.files.getFileUrl,
-    selectedVersion?.image ? { storageId: selectedVersion.image } : "skip",
+  // 1. UNIFIED DATA FETCHING
+  // We now use our new, efficient query to get all data at once.
+  const { data, isLoading } = useQuery(
+    convexQuery(api.segments.getSegmentEditorData, { segmentId }),
   );
 
-  // 2. STATE MANAGEMENT
+  // Derive all data from the single query result.
+  const segment = data?.segment;
+  const versions = data?.imageVersions;
+  const videoClip = data?.videoClip;
+
+  const selectedVersion = useMemo(
+    () => versions?.find((v) => v._id === segment?.selectedVersionId),
+    [versions, segment?.selectedVersionId],
+  );
+
+  const imageUrl = selectedVersion?.imageUrl;
+  const videoClipUrl = videoClip?.url; // The video URL is now available.
+
+  // 2. STATE MANAGEMENT (Unchanged)
   const [promptText, setPromptText] = useState("");
   const [tuningPrompt, setTuningPrompt] = useState("");
 
-  // 3. MUTATIONS
+  // 3. MUTATIONS (Your existing mutations are preserved)
   const { mutateAsync: regenerateImage, isPending: isRegenerating } =
-    useMutation({
+    useTanstackMutation({
       mutationFn: useConvexMutation(api.segments.regenerateImage),
     });
 
-  const { mutateAsync: editImage, isPending: isEditing } = useMutation({
+  const { mutateAsync: editImage, isPending: isEditing } = useTanstackMutation({
     mutationFn: useConvexMutation(api.segments.editImage),
   });
 
-  const { mutate: selectVersion, isPending: isSelecting } = useMutation({
+  const { mutate: selectVersion, isPending: isSelecting } = useTanstackMutation({
     mutationFn: useConvexMutation(api.imageVersions.selectVersion),
     onSuccess: () => toast.success(t("toastVersionSelected")),
     onError: (err) => {
@@ -56,12 +57,11 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
     },
   });
 
-  // 4. DERIVED STATE
+  // 4. DERIVED STATE (Unchanged)
   const isProcessing = segment?.isGenerating || isRegenerating || isEditing;
 
-  // 5. SIDE EFFECTS
+  // 5. SIDE EFFECTS (Your existing effects are preserved)
   useEffect(() => {
-    // Sync prompt text area with the most relevant prompt
     if (selectedVersion?.prompt) {
       setPromptText(selectedVersion.prompt);
     } else {
@@ -71,7 +71,6 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
   }, [selectedVersion, versions]);
 
   useEffect(() => {
-    // Toast notification when background processing is finished
     if (segment?.isGenerating === false && segment.error) {
       toast.error(t("toastImageProcessFailed"), {
         description: segment.error,
@@ -79,7 +78,7 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
     }
   }, [segment?.isGenerating, segment?.error, t]);
 
-  // 6. EVENT HANDLERS
+  // 6. EVENT HANDLERS (Your existing handlers are preserved)
   const handleRegenerate = async () => {
     if (!promptText.trim()) return toast.error(t("toastPromptEmpty"));
     await regenerateImage({ segmentId, prompt: promptText });
@@ -98,26 +97,24 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
     setTuningPrompt("");
   };
 
+  // Return values, now including videoClipUrl
   return {
-    // Data
     segment,
     versions: versions as VersionWithUrl[] | undefined,
     selectedVersion,
     imageUrl,
-    // Form State
+    videoClipUrl, // EXPOSE THE VIDEO URL
     promptText,
     setPromptText,
     tuningPrompt,
     setTuningPrompt,
-    // Handlers
     handleRegenerate,
     handleEditImage,
     selectVersion,
-    // Statuses
     isProcessing,
     isSelecting,
     isEditing,
     isRegenerating,
-    isLoading: segment === undefined || versions === undefined,
+    isLoading: isLoading,
   };
 }

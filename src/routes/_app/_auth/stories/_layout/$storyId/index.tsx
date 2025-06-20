@@ -17,6 +17,7 @@ import {
   Palette,
   UploadCloud,
   Undo2,
+  Video,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -36,6 +37,8 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { SegmentCardSkeleton } from "./-components/segment-card-skeleton";
 import { useStorySegments } from "@/hooks/useStorySegments";
+import { useStoryDetailPage } from "@/hooks/useStoryDetailPage";
+import { Badge } from "@/ui/badge";
 
 export const Route = createFileRoute("/_app/_auth/stories/_layout/$storyId/")({
   component: Story,
@@ -48,11 +51,9 @@ type SegmentWithImageUrl = NonNullable<
 export default function Story() {
   const { storyId } = Route.useParams();
   const { t } = useTranslation();
-  const story = useQuery(api.story.getStory, {
-    storyId: storyId as Id<"story">,
-  });
+  const { story, isLoading } = useStoryDetailPage(storyId as Id<"story">);
 
-  if (story === undefined) {
+  if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <Spinner />
@@ -60,7 +61,7 @@ export default function Story() {
     );
   }
 
-  if (story === null) {
+  if (!story) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-gray-500 dark:text-gray-400">
@@ -113,9 +114,20 @@ function SortableSegmentItem({
   );
 }
 
-function StorySection({ story }: { story: Doc<"story"> }) {
+function StorySection({
+  story,
+}: {
+  story: NonNullable<ReturnType<typeof useStoryDetailPage>["story"]>;
+}) {
   const { t } = useTranslation();
+  const storyId = story._id;
   const updateStatusMutation = useConvexMutation(api.story.updateStatus);
+  const {
+    videoVersion,
+    isGeneratingVideo,
+    canGenerateVideo,
+    handleGenerateVideo,
+  } = useStoryDetailPage(storyId);
 
   const { mutate: updateStatus, isPending: isUpdatingStatus } = useMutation({
     mutationFn: async (status: Doc<"story">["status"]) => {
@@ -137,6 +149,10 @@ function StorySection({ story }: { story: Doc<"story"> }) {
     },
   });
 
+  const videoStatus = videoVersion?.generationStatus;
+  const isAnythingGenerating =
+    story.generationStatus === "processing" || isGeneratingVideo;
+
   return (
     <div className="space-y-6">
       <div className="space-y-4">
@@ -147,26 +163,59 @@ function StorySection({ story }: { story: Doc<"story"> }) {
           </Link>
         </Button>
         <div className="flex flex-col items-start justify-between gap-4 border-b pb-4 md:flex-row md:items-center">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
               {story.title}
             </h1>
             {story.generationStatus === "processing" && (
-              <span className="flex items-center gap-1 text-sm text-blue-500">
+              <Badge variant="outline" className="flex items-center gap-1.5">
                 <Spinner />
                 {t("statusGenerating")}
-              </span>
+              </Badge>
             )}
             {story.generationStatus === "error" && (
-              <span className="text-sm text-red-500">
-                {t("statusGenerationFailed")}
-              </span>
+              <Badge variant="destructive">{t("statusGenerationFailed")}</Badge>
+            )}
+            {isGeneratingVideo && (
+              <Badge variant="outline" className="flex items-center gap-1.5">
+                <Spinner />
+                {`${t(videoStatus ?? "generating")}...`}
+              </Badge>
+            )}
+            {videoVersion?.generationStatus === "generated" && (
+              <Badge variant="success" className="flex items-center gap-1.5">
+                <Video className="h-4 w-4" />
+                {t("videoReady")}
+              </Badge>
+            )}
+            {videoVersion?.generationStatus === "error" && (
+              <Badge variant="destructive">{t("videoFailed")}</Badge>
             )}
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="default"
+              onClick={handleGenerateVideo}
+              disabled={isAnythingGenerating || !canGenerateVideo}
+              title={
+                !canGenerateVideo
+                  ? t("mustHaveSegmentsToGenerateVideo")
+                  : t("generateVideoTooltip")
+              }
+            >
+              {isGeneratingVideo ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Clapperboard className="mr-2 h-4 w-4" />
+              )}
+              {t("generateVideo")}
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" disabled={isUpdatingStatus}>
+                <Button
+                  variant="outline"
+                  disabled={isUpdatingStatus || isAnythingGenerating}
+                >
                   {isUpdatingStatus ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
@@ -208,11 +257,6 @@ function StorySection({ story }: { story: Doc<"story"> }) {
                     <span>{t("unpublishStory")}</span>
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem disabled>
-                  <Clapperboard className="mr-2 h-4 w-4" />
-                  <span>{t("exportVideo")}</span>
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -223,7 +267,11 @@ function StorySection({ story }: { story: Doc<"story"> }) {
   );
 }
 
-function StorySegments({ story }: { story: Doc<"story"> }) {
+function StorySegments({
+  story,
+}: {
+  story: NonNullable<ReturnType<typeof useStoryDetailPage>["story"]>;
+}) {
   const { _id: storyId } = story;
   const { t } = useTranslation();
 

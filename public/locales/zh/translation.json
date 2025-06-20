@@ -170,5 +170,15 @@
   "unarchive": "取消归档",
   "storyArchivedSuccess": "故事已成功归档。",
   "storyUnarchivedSuccess": "故事已成功取消归档并移至草稿。",
-  "storyStatusUpdateError": "更新故事状态失败。"
+  "storyStatusUpdateError": "更新故事状态失败。",
+  "generateVideo": "生成视频",
+  "generateVideoTooltip": "根据所有故事片段生成一个视频。",
+  "mustHaveSegmentsToGenerateVideo": "您必须先生成片段才能创建视频。",
+  "toastVideoGenerationStarted": "视频生成已开始！您可以在此页面查看状态。",
+  "toastVideoGenerationFailed": "启动视频生成失败。",
+  "generating": "生成中",
+  "generating_clips": "正在生成片段",
+  "merging_clips": "正在合并片段",
+  "videoReady": "视频已就绪",
+  "videoFailed": "视频生成失败"
 }

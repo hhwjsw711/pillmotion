@@ -170,5 +170,15 @@
   "unarchive": "Unarchive",
   "storyArchivedSuccess": "Story successfully archived.",
   "storyUnarchivedSuccess": "Story successfully unarchived and moved to drafts.",
-  "storyStatusUpdateError": "Failed to update story status."
+  "storyStatusUpdateError": "Failed to update story status.",
+  "generateVideo": "Generate Video",
+  "generateVideoTooltip": "Generate a video from all story segments.",
+  "mustHaveSegmentsToGenerateVideo": "You must generate segments before creating a video.",
+  "toastVideoGenerationStarted": "Video generation has started! You can check the status on this page.",
+  "toastVideoGenerationFailed": "Failed to start video generation.",
+  "generating": "Generating",
+  "generating_clips": "Generating clips",
+  "merging_clips": "Merging clips",
+  "videoReady": "Video Ready",
+  "videoFailed": "Video Failed"
 }

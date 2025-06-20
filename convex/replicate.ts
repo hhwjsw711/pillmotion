@@ -62,6 +62,54 @@ This fragment will be prepended to a specific scene description to ensure a cons
   }
 }
 
+async function generateVideoPrompt(
+  sceneText: string,
+  styleGuide: string | undefined,
+) {
+  const systemPrompt = `You are an expert film director and cinematographer. Your task is to convert a simple narrative scene description into a rich, detailed, and actionable prompt for a text-to-video AI model.
+
+The final prompt must be in ENGLISH and should be a single, comma-separated string of descriptive phrases.
+
+You will be given the original narrative text in <SceneText> tags and an overall style guide in <StyleGuide> tags.
+
+**Your prompt MUST describe:**
+1.  **Cinematography**: Specify the shot type (e.g., wide shot, medium close-up, aerial shot) and camera movement (e.g., static, slow pan, tracking shot, dolly zoom, handheld).
+2.  **Subject & Action**: Clearly describe the main character(s) and their specific actions.
+3.  **Environment**: Detail the setting, lighting, and overall mood.
+
+**Example 1:**
+- Input:
+<SceneText>A princess lived in a castle.</SceneText>
+<StyleGuide>Ghibli style</StyleGuide>
+- Your Output: Ghibli style, wide shot of a magnificent castle perched on a hill, a young princess visible in a high tower window, slow panning motion across the landscape, soft morning light, cinematic.
+
+**Example 2:**
+- Input:
+<SceneText>The knight charged the dragon.</SceneText>
+<StyleGuide>Epic fantasy film</StyleGuide>
+- Your Output: Epic fantasy film, dynamic low-angle tracking shot, a knight in shining armor charges forward on horseback, a massive dragon rears up ahead breathing fire, dramatic lighting, lens flare.`;
+
+  const userContent = `<SceneText>${sceneText}</SceneText>
+<StyleGuide>${styleGuide ?? "General cinematic style"}</StyleGuide>`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      temperature: 0.7,
+    });
+    // Fallback to the original text if the LLM fails to produce a good prompt
+    return completion.choices[0]?.message?.content ?? sceneText;
+  } catch (error) {
+    console.error("Error generating video prompt:", error);
+    // Fallback to the original text in case of an error
+    return sceneText;
+  }
+}
+
 export const regenerateSegmentImageUsingPrompt = internalAction({
   args: { segmentId: v.id("segments"), prompt: v.string() },
   handler: async (ctx, args) => {
@@ -395,6 +443,144 @@ export const editSegmentImageUsingPrompt = internalAction({
         isGenerating: false,
         error: error.message,
       });
+    }
+  },
+});
+
+export const generateVideoClip = internalAction({
+  args: {
+    segmentId: v.id("segments"),
+    videoVersionId: v.id("videoVersions"), // 我们需要这个来追踪整体任务
+  },
+  handler: async (
+    ctx,
+    { segmentId, videoVersionId },
+  ): Promise<{ success: boolean; error?: string }> => {
+    // 1. 获取此场景（segment）的详细信息
+    const segment = await ctx.runQuery(internal.segments.getSegmentInternal, {
+      segmentId,
+    });
+    if (!segment) {
+      // 如果找不到场景，就无法继续。
+      const errorMsg = `Segment not found: ${segmentId}`;
+      console.error(errorMsg);
+      return { success: false, error: errorMsg };
+    }
+
+    // 2. 获取这个场景所选定的图片版本
+    if (!segment.selectedVersionId) {
+      const errorMsg = `Segment ${segmentId} has no selected image version.`;
+      console.error(errorMsg);
+      return { success: false, error: errorMsg };
+    }
+    const imageVersion = await ctx.runQuery(
+      internal.imageVersions.getVersionInternal,
+      { versionId: segment.selectedVersionId },
+    );
+    if (!imageVersion) {
+      const errorMsg = `Image version not found: ${segment.selectedVersionId}`;
+      console.error(errorMsg);
+      return { success: false, error: errorMsg };
+    }
+
+    // 3. 获取故事的全局信息，比如 stylePrompt
+    const story = await ctx.runQuery(internal.story.getStoryInternal, {
+      storyId: segment.storyId,
+    });
+    if (!story) {
+      const errorMsg = `Story not found for segment: ${segmentId}`;
+      console.error(errorMsg);
+      return { success: false, error: errorMsg };
+    }
+
+    let videoPrompt: string | undefined;
+
+    try {
+      // 4. 获取图片的公开 URL，作为视频生成的起始图片
+      const startImageUrl = await ctx.storage.getUrl(imageVersion.image);
+      if (!startImageUrl) {
+        throw new Error("Could not get URL for start image.");
+      }
+
+      // 5. NEW: 调用“AI导演”来将场景文本转换为详细的视频 prompt
+      videoPrompt = await generateVideoPrompt(segment.text, story.stylePrompt);
+
+      // 6. 准备调用 Replicate 的输入
+      const input = {
+        prompt: videoPrompt, // 使用新生成的、包含镜头语言的 prompt
+        start_image: startImageUrl,
+        mode: "standard",
+        duration: 5,
+        negative_prompt:
+          "low quality, bad quality, blurry, pixelated, cgi, fake, unreal, cartoon, drawing, illustration, watermark",
+      };
+
+      // 7. 调用 "可灵" 模型。根据您提供的 Schema，它返回一个视频文件的 URL。
+      const output = await replicate.run("kwaivgi/kling-v2.1", {
+        input,
+      });
+
+      // 使用 String() 来安全地将返回值转换为字符串，避免 TypeScript 报错。
+      const outputUrl = String(output);
+
+      if (!outputUrl || typeof outputUrl !== "string") {
+        throw new Error(
+          `Replicate did not return a valid URL string. Got: ${outputUrl}`,
+        );
+      }
+
+      // 7. 从返回的 URL 下载视频数据
+      const videoResponse = await fetch(outputUrl);
+      if (!videoResponse.ok) {
+        throw new Error(
+          `Failed to fetch video from Replicate URL: ${videoResponse.statusText}`,
+        );
+      }
+      const videoBuffer = await videoResponse.arrayBuffer();
+
+      // 8. 将下载的视频数据存入 Convex 文件系统
+      const videoStorageId = await ctx.storage.store(
+        new Blob([videoBuffer], { type: "video/mp4" }),
+      );
+
+      // 9. 在 videoClipVersions 表中创建一条新版本记录
+      const videoClipVersionId = await ctx.runMutation(
+        internal.segments.createVideoClipVersion,
+        {
+          videoVersionId: videoVersionId,
+          segmentId: segment._id,
+          userId: story.userId,
+          storageId: videoStorageId,
+          generationStatus: "generated",
+          sourceImageVersionId: imageVersion._id,
+          prompt: videoPrompt,
+        },
+      );
+
+      // 10. 将新创建的视频片段版本 ID 关联到对应的场景上
+      await ctx.runMutation(internal.segments.updateSegmentWithVideo, {
+        segmentId: segment._id,
+        videoClipVersionId: videoClipVersionId,
+      });
+      return { success: true };
+    } catch (error: any) {
+      const errorMessage =
+        error.message || "Unknown error during video clip generation.";
+      console.error(
+        `Failed to generate video clip for segment ${segmentId}:`,
+        error,
+      );
+      // 在 videoClipVersions 中创建一条失败的记录，方便追踪哪个片段失败了
+      await ctx.runMutation(internal.segments.createVideoClipVersion, {
+        videoVersionId: videoVersionId,
+        segmentId: segment._id,
+        userId: story.userId,
+        generationStatus: "error",
+        statusMessage: errorMessage,
+        sourceImageVersionId: imageVersion?._id,
+        prompt: videoPrompt,
+      });
+      return { success: false, error: errorMessage };
     }
   },
 });

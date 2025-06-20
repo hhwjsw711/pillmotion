@@ -95,6 +95,31 @@ export const imageVersionSourceValidator = v.union(
 );
 export type ImageVersionSource = Infer<typeof imageVersionSourceValidator>;
 
+export const videoGenerationStatusValidator = v.union(
+  v.literal("idle"),
+  v.literal("pending"),
+  v.literal("generating_clips"),
+  v.literal("merging_clips"),
+  v.literal("generated"),
+  v.literal("error"),
+);
+export type VideoGenerationStatus = Infer<
+  typeof videoGenerationStatusValidator
+>;
+
+export const videoProcessingStatusValidator = v.union(
+  v.literal("idle"),
+  v.literal("processing"),
+  v.literal("completed"),
+  v.literal("error"),
+);
+
+export const videoVersionSourceValidator = v.union(
+  v.literal("ai_generated"),
+  v.literal("user_uploaded"),
+);
+export type VideoVersionSource = Infer<typeof videoVersionSourceValidator>;
+
 const schema = defineSchema({
   ...authTables,
   users: defineTable({
@@ -154,10 +179,11 @@ const schema = defineSchema({
     generationId: v.optional(v.string()),
     stylePrompt: v.optional(v.string()),
     thumbnailUrl: v.optional(v.union(v.string(), v.null())),
+    selectedVideoVersionId: v.optional(v.id("videoVersions")),
   })
     .index("userId", ["userId"])
     .index("by_user_status", ["userId", "status"])
-    .index("by_status", ["status"]) // <-- 添加这个新的索引
+    .index("by_status", ["status"])
     .searchIndex("search_story", { searchField: "script" }),
   segments: defineTable({
     storyId: v.id("story"),
@@ -166,7 +192,7 @@ const schema = defineSchema({
     isGenerating: v.boolean(),
     selectedVersionId: v.optional(v.id("imageVersions")),
     error: v.optional(v.string()),
-    isAnalyzingText: v.optional(v.boolean()),
+    selectedVideoClipVersionId: v.optional(v.id("videoClipVersions")),
   })
     .index("by_story", ["storyId"])
     .index("by_story_order", ["storyId", "order"]),
@@ -178,6 +204,31 @@ const schema = defineSchema({
     previewImage: v.id("_storage"),
     source: imageVersionSourceValidator,
   }).index("by_segment", ["segmentId"]),
+  videoVersions: defineTable({
+    storyId: v.id("story"),
+    userId: v.id("users"),
+    storageId: v.optional(v.id("_storage")),
+    source: videoVersionSourceValidator,
+    generationStatus: videoGenerationStatusValidator,
+    processingStatus: v.optional(videoProcessingStatusValidator),
+    generationId: v.optional(v.string()),
+    statusMessage: v.optional(v.string()),
+  }).index("by_story", ["storyId"]),
+  videoClipVersions: defineTable({
+    videoVersionId: v.id("videoVersions"),
+    segmentId: v.id("segments"),
+    userId: v.id("users"),
+    storageId: v.optional(v.id("_storage")),
+    source: videoVersionSourceValidator,
+    sourceImageVersionId: v.optional(v.id("imageVersions")),
+    prompt: v.optional(v.string()),
+    generationStatus: videoGenerationStatusValidator,
+    processingStatus: v.optional(videoProcessingStatusValidator),
+    generationId: v.optional(v.string()),
+    statusMessage: v.optional(v.string()),
+  })
+    .index("by_segment", ["segmentId"])
+    .index("by_videoVersion", ["videoVersionId"]),
 });
 
 export default schema;

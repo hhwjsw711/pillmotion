@@ -4,16 +4,7 @@ import { useMutation as useTanstackMutation } from "@tanstack/react-query";
 import { api } from "~/convex/_generated/api";
 import { Id } from "~/convex/_generated/dataModel";
 import { Link } from "@tanstack/react-router";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/ui/alert-dialog";
+import { Button } from "@/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -87,36 +78,75 @@ export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
       return () => clearTimeout(handler);
     }, [text, segment.text, debouncedUpdateText]);
 
+    // 处理取消删除
+    const handleCancelDelete = () => {
+      setIsDeleteDialogOpen(false);
+    };
+
+    // 处理确认删除
+    const handleConfirmDelete = () => {
+      deleteSegment();
+    };
+
+    // 处理ESC键关闭对话框
+    useEffect(() => {
+      const handleEscape = (e: KeyboardEvent) => {
+        if (e.key === "Escape" && isDeleteDialogOpen) {
+          handleCancelDelete();
+        }
+      };
+
+      window.addEventListener("keydown", handleEscape);
+      return () => window.removeEventListener("keydown", handleEscape);
+    }, [isDeleteDialogOpen]);
+
     return (
       <>
-        <AlertDialog
-          open={isDeleteDialogOpen}
-          onOpenChange={setIsDeleteDialogOpen}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                {t("confirmDeleteSegmentTitle")}
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("confirmDeleteSegmentDescription")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => deleteSegment()}
-                disabled={isDeleting}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                {isDeleting && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                {t("delete")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {/* 自定义的删除确认模态窗口 */}
+        {isDeleteDialogOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            {/* 背景遮罩 */}
+            <div
+              className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-all"
+              onClick={handleCancelDelete}
+            ></div>
+
+            {/* 模态框内容 */}
+            <div className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg">
+              {/* 标题和描述 */}
+              <div className="flex flex-col space-y-1.5 text-center sm:text-left">
+                <h3 className="text-lg font-semibold leading-none tracking-tight">
+                  {t("confirmDeleteSegmentTitle")}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {t("confirmDeleteSegmentDescription")}
+                </p>
+              </div>
+
+              {/* 按钮组 */}
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  variant="outline"
+                  onClick={handleCancelDelete}
+                  className="mt-2 sm:mt-0"
+                >
+                  {t("cancel")}
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleConfirmDelete}
+                  disabled={isDeleting}
+                  className="sm:ml-2"
+                >
+                  {isDeleting && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {t("delete")}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div
           ref={ref}

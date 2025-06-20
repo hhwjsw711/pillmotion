@@ -7,7 +7,7 @@ import {
 } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { CREDIT_COSTS } from "./schema";
+import { CREDIT_COSTS, videoGenerationStatusValidator } from "./schema";
 import OpenAI from "openai";
 import { Doc, Id } from "./_generated/dataModel";
 import { consumeCreditsHelper } from "./credits";
@@ -101,6 +101,107 @@ export const getSegmentInternal = internalQuery({
   args: { segmentId: v.id("segments") },
   async handler(ctx, args) {
     return await ctx.db.get(args.segmentId);
+  },
+});
+
+export const getSegments = internalQuery({
+  args: { storyId: v.id("story") },
+  async handler(ctx, args) {
+    return await ctx.db
+      .query("segments")
+      .withIndex("by_story_order", (q) => q.eq("storyId", args.storyId))
+      .order("asc")
+      .collect();
+  },
+});
+
+export const createVideoClipVersion = internalMutation({
+  args: {
+    videoVersionId: v.id("videoVersions"),
+    segmentId: v.id("segments"),
+    userId: v.id("users"),
+    storageId: v.optional(v.id("_storage")),
+    sourceImageVersionId: v.optional(v.id("imageVersions")),
+    prompt: v.optional(v.string()),
+    generationStatus: videoGenerationStatusValidator,
+    statusMessage: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("videoClipVersions", {
+      videoVersionId: args.videoVersionId,
+      segmentId: args.segmentId,
+      userId: args.userId,
+      storageId: args.storageId,
+      sourceImageVersionId: args.sourceImageVersionId,
+      prompt: args.prompt,
+      generationStatus: args.generationStatus,
+      statusMessage: args.statusMessage,
+      source: "ai_generated",
+      // 初始化其他可选字段
+      processingStatus: "idle",
+    });
+  },
+});
+
+export const updateSegmentWithVideo = internalMutation({
+  args: {
+    segmentId: v.id("segments"),
+    videoClipVersionId: v.id("videoClipVersions"),
+  },
+  handler: async (ctx, { segmentId, videoClipVersionId }) => {
+    await ctx.db.patch(segmentId, {
+      selectedVideoClipVersionId: videoClipVersionId,
+    });
+  },
+});
+
+export const getSegmentEditorData = query({
+  args: { segmentId: v.id("segments") },
+  handler: async (ctx, args) => {
+    const segment = await ctx.db.get(args.segmentId);
+    if (!segment) {
+      return null;
+    }
+
+    await verifyStoryOwner(ctx, segment.storyId);
+
+    const imageVersions = await ctx.db
+      .query("imageVersions")
+      .withIndex("by_segment", (q) => q.eq("segmentId", args.segmentId))
+      .order("desc")
+      .collect();
+
+    const imageVersionsWithUrls = await Promise.all(
+      imageVersions.map(async (version) => {
+        const [imageUrl, previewImageUrl] = await Promise.all([
+          version.image ? ctx.storage.getUrl(version.image) : null,
+          version.previewImage
+            ? ctx.storage.getUrl(version.previewImage)
+            : null,
+        ]);
+        return { ...version, imageUrl, previewImageUrl };
+      }),
+    );
+
+    let videoClipData = null;
+    if (segment.selectedVideoClipVersionId) {
+      const videoClipVersion = await ctx.db.get(
+        segment.selectedVideoClipVersionId,
+      );
+      if (videoClipVersion?.storageId) {
+        const url = await ctx.storage.getUrl(videoClipVersion.storageId);
+        videoClipData = {
+          ...videoClipVersion,
+          url,
+        };
+      }
+    }
+
+    return {
+      segment,
+      imageVersions: imageVersionsWithUrls,
+      videoClip: videoClipData,
+    };
   },
 });
 

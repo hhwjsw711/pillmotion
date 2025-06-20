@@ -13,6 +13,7 @@ import {
   storyStatusValidator,
   CREDIT_COSTS,
   storyGenerationStatusValidator,
+  videoGenerationStatusValidator,
 } from "./schema";
 import { internal } from "./_generated/api";
 import { consumeCreditsHelper } from "./credits";
@@ -251,6 +252,137 @@ export const generateSegments = mutation({
       storyId,
       userId: userId,
       generationId: generationId,
+    });
+  },
+});
+
+export const generateVideo = mutation({
+  args: {
+    storyId: v.id("story"),
+  },
+  handler: async (ctx, { storyId }) => {
+    // 1. 验证用户权限，确保是故事的所有者
+    const { userId } = await verifyStoryOwner(ctx, storyId);
+
+    // 2. 为这次生成创建一个唯一的 ID
+    const generationId = nanoid();
+
+    // 3. 在 videoVersions 表中创建一条新的记录来代表这次生成任务
+    const videoVersionId = await ctx.db.insert("videoVersions", {
+      storyId: storyId,
+      userId: userId,
+      source: "ai_generated",
+      generationStatus: "pending",
+      generationId: generationId,
+    });
+
+    // 4. 将 story 指向这个新创建的、正在进行的视频版本
+    await ctx.db.patch(storyId, {
+      selectedVideoVersionId: videoVersionId,
+    });
+
+    // 5. TODO: 扣除生成视频所需的积分
+    await consumeCreditsHelper(ctx, userId, CREDIT_COSTS.VIDEO_GENERATION);
+
+    // 6. 调度一个后台 action 来开始真正的视频生成工作
+    await ctx.scheduler.runAfter(0, internal.story.generateVideoOrchestrator, {
+      storyId,
+      videoVersionId,
+      // TODO: 我们还需要传递其他必要的上下文信息，例如 prompt 等
+    });
+
+    // 7. 返回新创建的视频版本 ID
+    return videoVersionId;
+  },
+});
+
+export const generateVideoOrchestrator = internalAction({
+  args: {
+    storyId: v.id("story"),
+    videoVersionId: v.id("videoVersions"),
+  },
+  handler: async (ctx, { storyId, videoVersionId }) => {
+    // 1. 更新当前视频版本的状态为“正在生成片段”
+    await ctx.runMutation(internal.story.updateVideoVersionStatus, {
+      videoVersionId,
+      status: "generating_clips",
+    });
+
+    try {
+      // 2. 获取故事的所有场景
+      const segments = await ctx.runQuery(internal.segments.getSegments, {
+        storyId,
+      });
+
+      if (segments.length === 0) {
+        // 如果没有场景，直接标记为错误或完成
+        await ctx.runMutation(internal.story.updateVideoVersionStatus, {
+          videoVersionId,
+          status: "error",
+          statusMessage: "Story has no segments to generate video from.",
+        });
+        return;
+      }
+
+      // 3. 为每个场景都启动一个独立的视频片段生成任务
+      const clipGenerationPromises = segments.map((segment) =>
+        ctx.runAction(internal.replicate.generateVideoClip, {
+          segmentId: segment._id,
+          videoVersionId: videoVersionId,
+        }),
+      );
+
+      // 4. 等待所有片段生成任务完成
+      const clipGenerationResults = await Promise.all(clipGenerationPromises);
+
+      // 5. 检查是否有任何片段生成失败
+      const hasErrors = clipGenerationResults.some((r) => !r.success);
+
+      if (hasErrors) {
+        const failedCount = clipGenerationResults.filter(
+          (r) => !r.success,
+        ).length;
+        await ctx.runMutation(internal.story.updateVideoVersionStatus, {
+          videoVersionId,
+          status: "error",
+          statusMessage: `${failedCount} out of ${segments.length} clips failed to generate.`,
+        });
+      } else {
+        // 6. TODO: 暂时在这里将状态标记为完成。
+        //    未来，这里将是触发“合并”操作的地方。
+        await ctx.runMutation(internal.story.updateVideoVersionStatus, {
+          videoVersionId,
+          status: "generated",
+          statusMessage:
+            "All clips generated. Merging step is not yet implemented.",
+        });
+      }
+    } catch (error: any) {
+      console.error(
+        `Video orchestrator failed for video version ${videoVersionId}:`,
+        error,
+      );
+      // 出现任何未知错误，都将状态标记为失败
+      await ctx.runMutation(internal.story.updateVideoVersionStatus, {
+        videoVersionId,
+        status: "error",
+        statusMessage: error.message,
+      });
+    }
+  },
+});
+
+// 我们需要一个新的 internalMutation 来更新 videoVersions 的状态
+export const updateVideoVersionStatus = internalMutation({
+  args: {
+    videoVersionId: v.id("videoVersions"),
+    status: videoGenerationStatusValidator,
+    statusMessage: v.optional(v.string()),
+  },
+  handler: async (ctx, { videoVersionId, status, statusMessage }) => {
+    await ctx.db.patch(videoVersionId, {
+      generationStatus: status,
+      statusMessage: statusMessage,
     });
   },
 });
@@ -513,5 +645,37 @@ export const internalUpdateStoryThumbnail = internalAction({
       storyId,
       thumbnailUrl,
     });
+  },
+});
+
+export const getStoryPageData = query({
+  args: { storyId: v.id("story") },
+  handler: async (ctx, args) => {
+    // We don't verify ownership here because a published story can be viewed
+    // by anyone. The `getStory` logic already handles this.
+    const story = await ctx.db.get(args.storyId);
+    if (!story) {
+      return null;
+    }
+
+    const segments = await ctx.db
+      .query("segments")
+      .withIndex("by_story", (q) => q.eq("storyId", args.storyId))
+      .collect();
+
+    // However, for video data, we should probably only show it to the owner.
+    // Let's verify ownership before fetching sensitive/expensive data.
+    const identity = await ctx.auth.getUserIdentity();
+    let videoVersion = null;
+    if (identity && story.userId === identity.subject) {
+      if (story.selectedVideoVersionId) {
+        videoVersion = await ctx.db.get(story.selectedVideoVersionId);
+      }
+    }
+
+    return {
+      story: { ...story, segmentCount: segments.length },
+      videoVersion,
+    };
   },
 });
