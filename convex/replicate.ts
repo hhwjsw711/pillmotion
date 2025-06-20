@@ -180,6 +180,8 @@ export const regenerateSegmentImageUsingPrompt = internalAction({
           },
         );
       }
+      // On success, explicitly return true.
+      return true;
     } catch (err) {
       const error = err as Error;
       console.error(error.message);
@@ -188,6 +190,9 @@ export const regenerateSegmentImageUsingPrompt = internalAction({
         isGenerating: false,
         error: error.message,
       });
+
+      // On failure, explicitly return false.
+      return false;
     }
   },
 });

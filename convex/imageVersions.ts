@@ -10,6 +10,8 @@ import { auth } from "./auth";
 import { internal } from "./_generated/api";
 import { Jimp } from "jimp";
 import { imageVersionSourceValidator } from "./schema";
+import { verifySegmentOwner } from "./lib/auth"; // 1. 导入统一的授权函数
+import { Id } from "./_generated/dataModel";
 
 const SCALED_IMAGE_WIDTH = 468;
 const SCALED_IMAGE_HEIGHT = 850;
@@ -17,28 +19,56 @@ const SCALED_IMAGE_HEIGHT = 850;
 export const getBySegment = query({
   args: { segmentId: v.id("segments") },
   async handler(ctx, args) {
-    const userId = await auth.getUserId(ctx);
-    if (!userId) {
-      throw new Error("User not authenticated.");
-    }
+    // 2. 使用集中的授权逻辑，更简洁、更一致
+    await verifySegmentOwner(ctx, args.segmentId);
 
-    // Authorization check: Ensure the user owns the story this segment belongs to.
-    const segment = await ctx.db.get(args.segmentId);
-    if (!segment) {
-      return []; // Return empty array if segment doesn't exist
-    }
-    const story = await ctx.db.get(segment.storyId);
-    if (!story || story.userId !== userId) {
-      throw new Error("User not authorized to view these versions.");
-    }
-
-    return await ctx.db
+    const versions = await ctx.db
       .query("imageVersions")
       .withIndex("by_segment", (q) => q.eq("segmentId", args.segmentId))
       .order("desc")
       .collect();
+
+    // 3. 预先生成所有图片的URL，解决前端N+1查询问题
+    const versionsWithUrls = await Promise.all(
+      versions.map(async (version) => {
+        const previewImageUrl = version.previewImage
+          ? await ctx.storage.getUrl(version.previewImage)
+          : null;
+        return {
+          ...version,
+          previewImageUrl,
+        };
+      }),
+    );
+
+    return versionsWithUrls;
   },
 });
+
+// 1. 新建一个可复用的内部辅助函数
+async function selectVersionHelper(
+  ctx: any,
+  args: { segmentId: Id<"segments">; versionId: Id<"imageVersions"> },
+) {
+  // 核心逻辑：选择版本，并清除所有进行中或错误的状态
+  await ctx.db.patch(args.segmentId, {
+    selectedVersionId: args.versionId,
+    isGenerating: false,
+    error: undefined,
+  });
+
+  // 检查是否需要更新故事封面
+  const segment = await ctx.db.get(args.segmentId);
+  if (segment && segment.order === 0) {
+    await ctx.scheduler.runAfter(
+      0,
+      internal.story.internalUpdateStoryThumbnail,
+      {
+        storyId: segment.storyId,
+      },
+    );
+  }
+}
 
 export const createAndSelectVersion = internalMutation({
   args: {
@@ -55,11 +85,9 @@ export const createAndSelectVersion = internalMutation({
       segmentId,
       ...versionArgs,
     });
-    await ctx.db.patch(segmentId, {
-      selectedVersionId: newVersionId,
-      isGenerating: false,
-      error: undefined,
-    });
+    // 2. 使用新的辅助函数来完成选择和状态清理
+    await selectVersionHelper(ctx, { segmentId, versionId: newVersionId });
+
     return newVersionId;
   },
 });
@@ -145,19 +173,6 @@ export const processUploadedImage = internalAction({
           "Failed to process uploaded image. It might be corrupted.",
       });
     }
-
-    const segment = await ctx.runQuery(internal.segments.getSegmentInternal, {
-      segmentId: args.segmentId,
-    });
-    if (segment && segment.order === 0) {
-      await ctx.scheduler.runAfter(
-        0,
-        internal.story.internalUpdateStoryThumbnail,
-        {
-          storyId: segment.storyId,
-        },
-      );
-    }
   },
 });
 
@@ -177,9 +192,10 @@ export const createVersionFromUpload = internalMutation({
       source: "user_uploaded",
     });
 
-    await ctx.db.patch(args.segmentId, {
-      selectedVersionId: newVersionId,
-      isGenerating: false, // Turn off processing state
+    // 3. (关键修复) 使用新的辅助函数，它会清除错误状态
+    await selectVersionHelper(ctx, {
+      segmentId: args.segmentId,
+      versionId: newVersionId,
     });
   },
 });
@@ -206,18 +222,11 @@ export const selectVersion = mutation({
       throw new Error("Version does not belong to this segment.");
     }
 
-    await ctx.db.patch(args.segmentId, {
-      selectedVersionId: args.versionId,
+    // 4. 使用新的辅助函数来统一逻辑并修复bug
+    await selectVersionHelper(ctx, {
+      segmentId: args.segmentId,
+      versionId: args.versionId,
     });
-    if (segment.order === 0) {
-      await ctx.scheduler.runAfter(
-        0,
-        internal.story.internalUpdateStoryThumbnail,
-        {
-          storyId: segment.storyId,
-        },
-      );
-    }
   },
 });
 

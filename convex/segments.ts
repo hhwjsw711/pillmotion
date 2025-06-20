@@ -145,7 +145,7 @@ export const generateAndCreateSegment = internalAction({
       }
       const prompt = JSON.parse(content).prompt;
 
-      await ctx.runAction(
+      const imageGenerationSuccess = await ctx.runAction(
         internal.replicate.regenerateSegmentImageUsingPrompt,
         {
           segmentId,
@@ -153,6 +153,14 @@ export const generateAndCreateSegment = internalAction({
         },
       );
 
+      // Check the result from the sub-action.
+      if (!imageGenerationSuccess) {
+        // If the sub-action failed, we propagate the failure upwards.
+        // The detailed error is already set on the segment in the sub-action.
+        return { success: false, error: "Image generation sub-task failed." };
+      }
+
+      // Only return success if the image generation was also successful.
       return { success: true };
     } catch (error: any) {
       console.error("Failed to generate segment:", error);
