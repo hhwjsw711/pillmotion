@@ -9,7 +9,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { CREDIT_COSTS } from "./schema";
 import OpenAI from "openai";
-import { Id } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 import { consumeCreditsHelper } from "./credits";
 import { verifySegmentOwner, verifyStoryOwner } from "./lib/auth";
 
@@ -219,36 +219,54 @@ export const getByStory = query({
     try {
       await verifyStoryOwner(ctx, args.storyId);
     } catch (error) {
-      // 如果验证失败，根据产品需求可以选择静默返回空数组或抛出错误
+      // On auth failure, we can silently return an empty array
+      // as the user shouldn't see any segments.
       return [];
     }
 
+    // 1. Fetch all segments for the story, ordered correctly.
     const segments = await ctx.db
       .query("segments")
       .withIndex("by_story_order", (q) => q.eq("storyId", args.storyId))
       .collect();
 
-    const versionIds = segments
-      .map((s) => s.selectedVersionId)
-      .filter((id) => id !== undefined) as Id<"imageVersions">[];
+    // 2. Extract all unique, valid version IDs.
+    const versionIds = [
+      ...new Set(segments.map((s) => s.selectedVersionId).filter(Boolean)),
+    ] as Id<"imageVersions">[];
 
-    if (versionIds.length === 0) {
-      return segments.map((s) => ({ ...s, selectedVersion: null }));
+    // 3. Fetch all corresponding image versions in a single query.
+    let versionsById = new Map<Id<"imageVersions">, Doc<"imageVersions">>();
+    if (versionIds.length > 0) {
+      const versions = await ctx.db
+        .query("imageVersions")
+        .filter((q) =>
+          q.or(...versionIds.map((id) => q.eq(q.field("_id"), id))),
+        )
+        .collect();
+      versionsById = new Map(versions.map((v) => [v._id, v]));
     }
 
-    const versions = await ctx.db
-      .query("imageVersions")
-      .filter((q) => q.or(...versionIds.map((id) => q.eq(q.field("_id"), id))))
-      .collect();
+    // 4. Map over segments to construct the final result, including the pre-signed URL.
+    const results = await Promise.all(
+      segments.map(async (segment) => {
+        const selectedVersion = segment.selectedVersionId
+          ? (versionsById.get(segment.selectedVersionId) ?? null)
+          : null;
 
-    const versionsById = new Map(versions.map((v) => [v._id, v]));
+        const previewImageUrl = selectedVersion?.previewImage
+          ? await ctx.storage.getUrl(selectedVersion.previewImage)
+          : null;
 
-    return segments.map((segment) => ({
-      ...segment,
-      selectedVersion: segment.selectedVersionId
-        ? (versionsById.get(segment.selectedVersionId) ?? null)
-        : null,
-    }));
+        return {
+          ...segment,
+          selectedVersion: selectedVersion,
+          previewImageUrl: previewImageUrl,
+        };
+      }),
+    );
+
+    return results;
   },
 });
 

@@ -1,12 +1,8 @@
 import { Input } from "@/ui/input";
-import { useMutation } from "@tanstack/react-query";
-import { useConvexMutation } from "@convex-dev/react-query";
-import { api } from "~/convex/_generated/api";
 import { Id } from "~/convex/_generated/dataModel";
-import { useState } from "react";
-import { toast } from "sonner";
 import { Loader2, CheckCircle2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useEditableTitle } from "@/hooks/useEditableTitle";
 
 export function EditableTitle({
   storyId,
@@ -16,20 +12,10 @@ export function EditableTitle({
   initialTitle: string;
 }) {
   const { t } = useTranslation();
-  const [isSuccess, setIsSuccess] = useState(false);
-  const { mutate, isPending } = useMutation({
-    mutationFn: useConvexMutation(api.story.updateStoryTitle),
-    onSuccess: () => {
-      setIsSuccess(true);
-      const timer = setTimeout(() => setIsSuccess(false), 2000);
-      return () => clearTimeout(timer);
-    },
-    onError: (err) => {
-      toast.error(t("toastTitleUpdateFailed"), {
-        description: err.message,
-      });
-    },
-  });
+  const { isPending, isSuccess, handleTitleChange } = useEditableTitle(
+    storyId,
+    initialTitle,
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -43,12 +29,7 @@ export function EditableTitle({
       <Input
         defaultValue={initialTitle}
         onKeyDown={handleKeyDown}
-        onBlur={(e) => {
-          const newTitle = e.target.value.trim();
-          if (newTitle && newTitle !== initialTitle) {
-            mutate({ storyId, title: newTitle });
-          }
-        }}
+        onBlur={(e) => handleTitleChange(e.target.value)}
         disabled={isPending}
         className="w-full !text-2xl h-auto border-none bg-transparent p-0 font-semibold focus-visible:ring-0"
         aria-label={t("ariaLabelStoryTitle")}

@@ -1,9 +1,8 @@
 import { useState, useEffect, forwardRef } from "react";
-import { useQuery } from "convex/react";
 import { useConvexMutation } from "@convex-dev/react-query";
 import { useMutation as useTanstackMutation } from "@tanstack/react-query";
 import { api } from "~/convex/_generated/api";
-import { Doc, Id } from "~/convex/_generated/dataModel";
+import { Id } from "~/convex/_generated/dataModel";
 import { Link } from "@tanstack/react-router";
 import {
   AlertDialog,
@@ -24,10 +23,12 @@ import {
 import { toast } from "sonner";
 import { Loader2, GripVertical, MoreHorizontal, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "convex/react";
 
-type SegmentWithVersion = Doc<"segments"> & {
-  selectedVersion: Doc<"imageVersions"> | null;
-};
+// The data structure we now expect from the `getByStory` query.
+type SegmentWithVersion = NonNullable<
+  ReturnType<typeof useQuery<typeof api.segments.getByStory>>
+>[number];
 
 interface SegmentCardProps extends React.HTMLAttributes<HTMLDivElement> {
   segment: SegmentWithVersion;
@@ -38,28 +39,7 @@ interface SegmentCardProps extends React.HTMLAttributes<HTMLDivElement> {
 export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
   ({ segment, storyId, dragHandleProps, ...props }, ref) => {
     const { t } = useTranslation();
-    const previewImageUrl = useQuery(
-      api.files.getFileUrl,
-      segment.selectedVersion?.previewImage
-        ? { storageId: segment.selectedVersion.previewImage }
-        : "skip",
-    );
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-
-    const [text, setText] = useState(segment.text);
-    const updateTextMutation = useConvexMutation(
-      api.segments.updateSegmentText,
-    );
-    const deleteSegmentMutation = useConvexMutation(api.segments.deleteSegment);
-
-    const { mutate: debouncedUpdateText } = useTanstackMutation({
-      mutationFn: async (newText: string) => {
-        await updateTextMutation({
-          segmentId: segment._id,
-          text: newText,
-        });
-      },
-    });
 
     const { mutate: deleteSegment, isPending: isDeleting } =
       useTanstackMutation({
@@ -77,6 +57,21 @@ export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
           });
         },
       });
+
+    const [text, setText] = useState(segment.text);
+    const updateTextMutation = useConvexMutation(
+      api.segments.updateSegmentText,
+    );
+    const deleteSegmentMutation = useConvexMutation(api.segments.deleteSegment);
+
+    const { mutate: debouncedUpdateText } = useTanstackMutation({
+      mutationFn: async (newText: string) => {
+        await updateTextMutation({
+          segmentId: segment._id,
+          text: newText,
+        });
+      },
+    });
 
     useEffect(() => {
       setText(segment.text);
@@ -173,9 +168,9 @@ export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   {t("imageGeneratingInProgress")}
                 </div>
-              ) : previewImageUrl ? (
+              ) : segment.previewImageUrl ? (
                 <img
-                  src={previewImageUrl}
+                  src={segment.previewImageUrl}
                   alt={t("sceneLabel", { order: segment.order + 1 })}
                   className="h-full w-full object-contain"
                 />

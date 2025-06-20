@@ -1,10 +1,6 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { TextEditor, useEditorCharacterCount } from "./-components/text-editor";
 import { Id } from "~/convex/_generated/dataModel";
-import { useQuery } from "convex/react"; // Changed from @tanstack/react-query
-import { useMutation } from "@tanstack/react-query";
-import { useConvexMutation } from "@convex-dev/react-query";
-import { api } from "~/convex/_generated/api";
 import { EditableTitle } from "./-components/editable-title";
 import { Button } from "@/ui/button";
 import {
@@ -16,16 +12,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/ui/dialog";
-import {
-  ArrowLeft,
-  Smartphone,
-  Monitor,
-  Loader2,
-  Sparkles,
-} from "lucide-react";
-import { useState, useEffect } from "react"; // Added useEffect
-import { toast } from "sonner";
-import { StoryFormat } from "~/convex/schema";
+import { ArrowLeft, Smartphone, Monitor, Loader2, Sparkles } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -34,6 +21,7 @@ import {
 } from "@/ui/tooltip";
 import { useTranslation } from "react-i18next";
 import { Spinner } from "@/ui/spinner";
+import { useRefinePage } from "@/hooks/useRefinePage";
 
 export const Route = createFileRoute(
   "/_app/_auth/stories/_layout/$storyId/refine",
@@ -47,48 +35,23 @@ export const Route = createFileRoute(
 
 export default function RefineStory() {
   const { storyId } = Route.useLoaderData();
-  const navigate = useNavigate();
   const { t } = useTranslation();
-  const [format, setFormat] = useState<StoryFormat>("vertical");
-  const [isOpen, setIsOpen] = useState(false);
-
-  // Use the standard convex hook for consistency and graceful null handling.
-  const story = useQuery(api.story.getStory, { storyId });
-
-  const { mutateAsync: generateSegments, isPending } = useMutation({
-    mutationFn: useConvexMutation(api.story.generateSegments),
-  });
-
-  // Add this effect to handle the case where the story is deleted.
-  useEffect(() => {
-    if (story === null) {
-      toast.error(t("storyNotFoundOrDeleted"));
-      navigate({ to: "/stories" });
-    }
-  }, [story, navigate, t]);
-
   const charCount = useEditorCharacterCount(storyId);
 
-  const handleGenerateSegments = async () => {
-    try {
-      await generateSegments({
-        storyId,
-        format,
-      });
-      toast.success(t("toastSegmentsGenerationStarted"));
-      setIsOpen(false);
-      navigate({
-        to: "/stories/$storyId",
-        params: { storyId },
-      });
-    } catch (error) {
-      toast.error(t("toastSegmentsGenerationFailed"));
-      console.error("Generate segments failed:", error);
-    }
-  };
+  // All the complex page logic is now neatly encapsulated here.
+  const {
+    story,
+    isLoading,
+    isGenerateDialogOpen,
+    setIsGenerateDialogOpen,
+    format,
+    setFormat,
+    isGenerating,
+    handleGenerateSegments,
+  } = useRefinePage(storyId);
 
-  // Render a spinner while loading or before navigating away.
-  if (story === undefined || story === null) {
+  // The component is now primarily responsible for rendering the UI.
+  if (isLoading || !story) {
     return (
       <div className="flex h-full items-center justify-center">
         <Spinner />
@@ -98,9 +61,7 @@ export default function RefineStory() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Centered container for the main content */}
       <div className="w-full max-w-4xl mx-auto flex-1 flex flex-col px-4 sm:px-6 lg:px-8 pb-4 md:pb-8">
-        {/* Header Section */}
         <header className="flex-shrink-0 pt-2">
           <div className="mb-4">
             <Button variant="ghost" size="sm" asChild className="-ml-3">
@@ -110,7 +71,6 @@ export default function RefineStory() {
               </Link>
             </Button>
           </div>
-          {/* We can safely access story properties now */}
           <div className="space-y-2">
             <EditableTitle storyId={storyId} initialTitle={story.title} />
             <div className="text-muted-foreground text-xs">
@@ -122,7 +82,6 @@ export default function RefineStory() {
           </div>
         </header>
 
-        {/* Editor Section */}
         <main className="flex-1 flex flex-col mt-6 min-h-0">
           <div className="flex-1 w-full relative">
             <TextEditor id={storyId} />
@@ -135,16 +94,15 @@ export default function RefineStory() {
         </main>
       </div>
 
-      {/* Floating Action Button */}
       <div className="fixed bottom-8 right-8 z-50">
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="default"
                   className="h-12 w-auto px-6 shadow-lg rounded-full"
-                  onClick={() => setIsOpen(true)}
+                  onClick={() => setIsGenerateDialogOpen(true)}
                 >
                   <Sparkles className="mr-2 h-5 w-5" />
                   {t("generateSegments")}
@@ -196,10 +154,10 @@ export default function RefineStory() {
                 type="button"
                 className="flex-1"
                 onClick={handleGenerateSegments}
-                disabled={isPending}
+                disabled={isGenerating}
               >
-                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isPending ? t("processing") : t("confirm")}
+                {isGenerating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isGenerating ? t("processing") : t("confirm")}
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { SegmentCard } from "./-components/segment-card";
 import { useQuery } from "convex/react";
 import { useConvexMutation } from "@convex-dev/react-query";
@@ -15,8 +15,8 @@ import {
   Loader2,
   FileText,
   Palette,
-  UploadCloud, // <-- Add UploadCloud icon
-  Undo2, // <-- Add Undo2 icon
+  UploadCloud,
+  Undo2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -25,17 +25,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
-import { useEffect, useState } from "react";
+import { DndContext, closestCenter, useSensors } from "@dnd-kit/core";
 import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
   SortableContext,
   useSortable,
   rectSortingStrategy,
@@ -44,10 +35,15 @@ import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { SegmentCardSkeleton } from "./-components/segment-card-skeleton";
+import { useStorySegments } from "@/hooks/useStorySegments";
 
 export const Route = createFileRoute("/_app/_auth/stories/_layout/$storyId/")({
   component: Story,
 });
+
+type SegmentWithImageUrl = NonNullable<
+  ReturnType<typeof useQuery<typeof api.segments.getByStory>>
+>[number];
 
 export default function Story() {
   const { storyId } = Route.useParams();
@@ -87,7 +83,7 @@ function SortableSegmentItem({
   segment,
   storyId,
 }: {
-  segment: Doc<"segments"> & { selectedVersion: Doc<"imageVersions"> | null };
+  segment: SegmentWithImageUrl;
   storyId: Id<"story">;
 }) {
   const {
@@ -229,85 +225,20 @@ function StorySection({ story }: { story: Doc<"story"> }) {
 
 function StorySegments({ story }: { story: Doc<"story"> }) {
   const { _id: storyId } = story;
-  const navigate = useNavigate();
   const { t } = useTranslation();
-  const segments = useQuery(api.segments.getByStory, { storyId });
-  const reorderMutation = useConvexMutation(api.segments.reorderSegments);
-  const addSegmentMutation = useConvexMutation(api.segments.addSegment);
 
-  const [activeSegments, setActiveSegments] = useState<typeof segments>([]);
+  const {
+    segmentsData,
+    activeSegments,
+    isAdding,
+    addSegment,
+    handleDragEnd,
+    pointerSensor,
+  } = useStorySegments(storyId);
 
-  useEffect(() => {
-    if (segments) {
-      setActiveSegments(segments);
-    }
-  }, [segments]);
+  const sensors = useSensors(pointerSensor);
 
-  const { mutate: reorderSegments } = useMutation({
-    mutationFn: async (orderedIds: Id<"segments">[]) => {
-      await reorderMutation({ storyId, segmentIds: orderedIds });
-    },
-    onSuccess: () => {
-      toast.success(t("toastOrderSaved"));
-    },
-    onError: (err) => {
-      toast.error(t("toastOrderSaveFailed"), {
-        description: err instanceof Error ? err.message : t("unknownError"),
-      });
-      if (segments) setActiveSegments(segments);
-    },
-  });
-
-  const { mutate: addSegment, isPending: isAdding } = useMutation({
-    mutationFn: async () => {
-      // We assume the convex mutation returns the ID of the new segment.
-      const newSegmentId = await addSegmentMutation({ storyId });
-      if (!newSegmentId) {
-        throw new Error("The backend did not return an ID for the new scene.");
-      }
-      return newSegmentId;
-    },
-    onSuccess: (newSegmentId) => {
-      toast.success(t("toastSegmentAdded"));
-      // Navigate to the new segment editor immediately.
-      navigate({
-        to: "/stories/$storyId/segments/$segmentId",
-        params: {
-          storyId,
-          segmentId: newSegmentId,
-        },
-      });
-    },
-    onError: (err) => {
-      toast.error(t("toastSegmentAddFailed"), {
-        description: err instanceof Error ? err.message : t("unknownError"),
-      });
-    },
-  });
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-  );
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-      setActiveSegments((items) => {
-        if (!items) return [];
-        const oldIndex = items.findIndex((item) => item._id === active.id);
-        const newIndex = items.findIndex((item) => item._id === over.id);
-        const newOrder = arrayMove(items, oldIndex, newIndex);
-        reorderSegments(newOrder.map((item) => item._id));
-        return newOrder;
-      });
-    }
-  }
-
-  if (segments === undefined) {
+  if (segmentsData === undefined) {
     return (
       <div className="grid grid-cols-1 gap-y-4 md:grid-cols-2 md:gap-x-8 lg:grid-cols-3">
         {[...Array(6)].map((_, i) => (
@@ -317,7 +248,7 @@ function StorySegments({ story }: { story: Doc<"story"> }) {
     );
   }
 
-  if (segments.length === 0) {
+  if (segmentsData.length === 0) {
     return (
       <div className="flex h-48 flex-col items-center justify-center space-y-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
         <p className="text-center text-gray-500 dark:text-gray-400">
@@ -348,7 +279,7 @@ function StorySegments({ story }: { story: Doc<"story"> }) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              {t("totalSegments", { count: segments.length })}
+              {t("totalSegments", { count: segmentsData.length })}
             </p>
             <Button
               variant="outline"

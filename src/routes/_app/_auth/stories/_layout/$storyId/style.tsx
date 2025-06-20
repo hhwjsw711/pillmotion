@@ -1,15 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Id } from "~/convex/_generated/dataModel";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { convexQuery, useConvexMutation } from "@convex-dev/react-query";
-import { api } from "~/convex/_generated/api";
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
 import { Textarea } from "@/ui/textarea";
-import { ArrowLeft, Loader2, Save, Wand2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { ArrowLeft, Loader2, Wand2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useStyleEditor, AutoSaveStatus } from "@/hooks/useStyleEditor";
 
 export const Route = createFileRoute(
   "/_app/_auth/stories/_layout/$storyId/style",
@@ -20,40 +16,53 @@ export const Route = createFileRoute(
   },
 });
 
+function AutoSaveIndicator({ status }: { status: AutoSaveStatus }) {
+  const { t } = useTranslation();
+
+  if (status === "idle") {
+    return null;
+  }
+
+  const statusConfig = {
+    saving: {
+      icon: <Loader2 className="mr-2 h-4 w-4 animate-spin" />,
+      text: t("statusSaving"),
+      className: "text-muted-foreground",
+    },
+    success: {
+      icon: <CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />,
+      text: t("statusAllChangesSaved"),
+      className: "text-green-600",
+    },
+    error: {
+      icon: <AlertTriangle className="mr-2 h-4 w-4 text-red-500" />,
+      text: t("statusSaveChangesFailed"),
+      className: "text-red-600",
+    },
+  };
+
+  const config = statusConfig[status];
+  if (!config) return null;
+
+  return (
+    <div className={`flex items-center text-sm ${config.className}`}>
+      {config.icon}
+      <span>{config.text}</span>
+    </div>
+  );
+}
+
+
 export default function StyleEditor() {
   const { storyId } = Route.useLoaderData();
   const { t } = useTranslation();
 
-  const { data: story, isLoading: isStoryLoading } = useQuery(
-    convexQuery(api.story.getStory, { storyId }),
-  );
-
-  const [stylePrompt, setStylePrompt] = useState("");
-
-  useEffect(() => {
-    if (story?.stylePrompt) {
-      setStylePrompt(story.stylePrompt);
-    }
-  }, [story]);
-
-  const updateStylePromptMutation = useConvexMutation(
-    api.story.updateStylePrompt,
-  );
-  const { mutate: updateStylePrompt, isPending: isUpdating } = useMutation({
-    mutationFn: async (newPrompt: string) => {
-      await updateStylePromptMutation({
-        storyId,
-        stylePrompt: newPrompt,
-      });
-    },
-    onSuccess: () => toast.success(t("toastStyleSaved")),
-    onError: (err) =>
-      toast.error(t("toastStyleSaveFailed", { error: err.message })),
-  });
-
-  const handleSave = () => {
-    updateStylePrompt(stylePrompt);
-  };
+  const {
+    isStoryLoading,
+    stylePrompt,
+    setStylePrompt,
+    saveStatus,
+  } = useStyleEditor(storyId);
 
   if (isStoryLoading) {
     return (
@@ -96,6 +105,7 @@ export default function StyleEditor() {
               onChange={(e) => setStylePrompt(e.target.value)}
               placeholder={t("visualStylePromptPlaceholder")}
               className="text-base"
+              disabled={saveStatus === "saving"}
             />
             <p className="text-xs text-muted-foreground">
               {t("visualStylePromptHint")}
@@ -104,14 +114,7 @@ export default function StyleEditor() {
         </section>
 
         <footer className="flex justify-end gap-3 pt-4 border-t">
-          <Button onClick={handleSave} disabled={isUpdating}>
-            {isUpdating ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="mr-2 h-4 w-4" />
-            )}
-            {t("buttonSaveChanges")}
-          </Button>
+          <AutoSaveIndicator status={saveStatus} />
         </footer>
       </main>
     </div>
