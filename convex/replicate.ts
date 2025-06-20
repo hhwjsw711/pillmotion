@@ -171,6 +171,15 @@ export const regenerateSegmentImageUsingPrompt = internalAction({
         previewImage: previewStorageId,
         source: "ai_generated",
       });
+      if (segment.order === 0) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.story.internalUpdateStoryThumbnail,
+          {
+            storyId: segment.storyId,
+          },
+        );
+      }
     } catch (err) {
       const error = err as Error;
       console.error(error.message);
@@ -364,6 +373,15 @@ export const editSegmentImageUsingPrompt = internalAction({
         previewImage: previewStorageId,
         source: "ai_edited",
       });
+      if (segment.order === 0) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.story.internalUpdateStoryThumbnail,
+          {
+            storyId: segment.storyId,
+          },
+        );
+      }
     } catch (err) {
       const error = err as Error;
       console.error(error.message);

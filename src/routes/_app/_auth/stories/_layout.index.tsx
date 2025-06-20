@@ -23,6 +23,7 @@ import {
 import { Id, Doc } from "~/convex/_generated/dataModel";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
+import { useStoryActions } from "~/src/hooks/useStoryActions";
 
 type StoryStatusTab = Doc<"story">["status"] | "all";
 
@@ -42,6 +43,9 @@ export function StoriesPage() {
   );
   const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false);
 
+  const { deleteStory, isDeleting, updateStatus, isUpdatingStatus } =
+    useStoryActions();
+
   const { mutateAsync: createStory, isPending: isCreating } = useMutation({
     mutationFn: useConvexMutation(api.story.createStory),
   });
@@ -49,44 +53,6 @@ export function StoriesPage() {
     useMutation({
       mutationFn: useConvexMutation(api.story.initializeEditor),
     });
-
-  const deleteStoryMutation = useConvexMutation(api.story.deleteStory);
-  const updateStatusMutation = useConvexMutation(api.story.updateStatus);
-
-  const { mutate: updateStatus, isPending: isUpdatingStatus } = useMutation({
-    mutationFn: (variables: {
-      storyId: Id<"story">;
-      status: Doc<"story">["status"];
-    }) => updateStatusMutation(variables),
-    onSuccess: (_, variables) => {
-      if (variables.status === "archived") {
-        toast.success(t("storyArchivedSuccess"));
-      } else if (variables.status === "draft") {
-        toast.success(t("storyUnarchivedSuccess"));
-      }
-    },
-    onError: (error) => {
-      toast.error(t("storyStatusUpdateError"), {
-        description: error instanceof Error ? error.message : t("unknownError"),
-      });
-    },
-  });
-
-  const { mutate: deleteStory, isPending: isDeleting } = useMutation({
-    mutationFn: async (storyId: Id<"story">) => {
-      await deleteStoryMutation({ storyId });
-    },
-    onSuccess: () => {
-      toast.success(t("storyDeletedSuccess"));
-      setStoryToDelete(null);
-    },
-    onError: (error) => {
-      toast.error(t("storyDeletedError"), {
-        description: error instanceof Error ? error.message : t("unknownError"),
-      });
-      setStoryToDelete(null);
-    },
-  });
 
   const isPendingCreation = isCreating || isInitializing;
 
@@ -128,6 +94,7 @@ export function StoriesPage() {
   const confirmDelete = () => {
     if (storyToDelete) {
       deleteStory(storyToDelete);
+      setStoryToDelete(null);
     }
   };
 
@@ -188,7 +155,7 @@ export function StoriesPage() {
           <StoryCard
             key={story._id}
             story={story}
-            showDeleteButton={true}
+            showActionsMenu={true}
             onDelete={handleDeleteRequest}
             onUpdateStatus={updateStatus}
             isUpdatingStatus={isUpdatingStatus}

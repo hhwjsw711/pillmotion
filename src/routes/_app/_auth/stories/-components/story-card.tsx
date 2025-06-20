@@ -43,7 +43,7 @@ type StoryWithThumbnail = NonNullable<
 
 interface StoryCardProps {
   story: StoryWithThumbnail;
-  showDeleteButton?: boolean;
+  showActionsMenu?: boolean;
   onDelete?: (storyId: Id<"story">) => void;
   onUpdateStatus?: (variables: {
     storyId: Id<"story">;
@@ -55,7 +55,7 @@ interface StoryCardProps {
 export const StoryCard = React.memo(
   ({
     story,
-    showDeleteButton = false,
+    showActionsMenu = false,
     onDelete,
     onUpdateStatus,
     isUpdatingStatus = false,
@@ -89,7 +89,7 @@ export const StoryCard = React.memo(
 
     return (
       <div
-        className="group relative flex cursor-pointer flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm transition-all hover:shadow-md"
+        className="group relative flex cursor-pointer flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
         onClick={() =>
           navigate({ to: "/stories/$storyId", params: { storyId: story._id } })
         }
@@ -142,7 +142,7 @@ export const StoryCard = React.memo(
               {new Date(story.updatedAt).toLocaleDateString()}
             </p>
             {/* The Action Menu: Appears on hover and contains all story actions. */}
-            {showDeleteButton && onDelete && (
+            {showActionsMenu && onDelete && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button

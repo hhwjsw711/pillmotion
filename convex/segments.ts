@@ -4,59 +4,16 @@ import {
   internalQuery,
   mutation,
   query,
-  MutationCtx,
-  QueryCtx,
 } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { CREDIT_COSTS } from "./schema";
 import OpenAI from "openai";
 import { Id } from "./_generated/dataModel";
-import { ConvexError } from "convex/values";
 import { consumeCreditsHelper } from "./credits";
-import { auth } from "./auth";
+import { verifySegmentOwner, verifyStoryOwner } from "./lib/auth";
 
 const openai = new OpenAI();
-
-async function verifyStoryOwnerHelper(
-  ctx: MutationCtx | QueryCtx,
-  storyId: Id<"story">,
-) {
-  const userId = await auth.getUserId(ctx);
-  if (!userId) {
-    throw new ConvexError("User not authenticated.");
-  }
-  const story = await ctx.db.get(storyId);
-  if (!story) {
-    throw new ConvexError("Story not found.");
-  }
-  if (story.userId !== userId) {
-    throw new ConvexError("User is not the owner of this story.");
-  }
-  return { story, userId };
-}
-
-async function verifySegmentOwnerHelper(
-  ctx: MutationCtx | QueryCtx,
-  segmentId: Id<"segments">,
-) {
-  const userId = await auth.getUserId(ctx);
-  if (!userId) {
-    throw new ConvexError("User not authenticated.");
-  }
-  const segment = await ctx.db.get(segmentId);
-  if (!segment) {
-    throw new ConvexError("Segment not found.");
-  }
-  const story = await ctx.db.get(segment.storyId);
-  if (!story) {
-    throw new ConvexError("Associated story not found.");
-  }
-  if (story.userId !== userId) {
-    throw new ConvexError("User is not the owner of this segment.");
-  }
-  return { segment, story, userId };
-}
 
 export const createSegment = internalMutation({
   args: {
@@ -92,7 +49,7 @@ export const updateSegmentText = mutation({
     text: v.string(),
   },
   async handler(ctx, args) {
-    await verifySegmentOwnerHelper(ctx, args.segmentId);
+    await verifySegmentOwner(ctx, args.segmentId);
     await ctx.db.patch(args.segmentId, { text: args.text });
   },
 });
@@ -100,7 +57,7 @@ export const updateSegmentText = mutation({
 export const deleteSegment = mutation({
   args: { segmentId: v.id("segments") },
   handler: async (ctx, { segmentId }) => {
-    const { segment: segmentToDelete } = await verifySegmentOwnerHelper(
+    const { segment: segmentToDelete } = await verifySegmentOwner(
       ctx,
       segmentId,
     );
@@ -130,6 +87,13 @@ export const deleteSegment = mutation({
     for (const segment of subsequentSegments) {
       await ctx.db.patch(segment._id, { order: segment.order - 1 });
     }
+    await ctx.scheduler.runAfter(
+      0,
+      internal.story.internalUpdateStoryThumbnail,
+      {
+        storyId: segmentToDelete.storyId,
+      },
+    );
   },
 });
 
@@ -253,7 +217,7 @@ export const getByStory = query({
   args: { storyId: v.id("story") },
   async handler(ctx, args) {
     try {
-      await verifyStoryOwnerHelper(ctx, args.storyId);
+      await verifyStoryOwner(ctx, args.storyId);
     } catch (error) {
       // 如果验证失败，根据产品需求可以选择静默返回空数组或抛出错误
       return [];
@@ -294,7 +258,7 @@ export const reorderSegments = mutation({
     segmentIds: v.array(v.id("segments")),
   },
   handler: async (ctx, { storyId, segmentIds }) => {
-    await verifyStoryOwnerHelper(ctx, storyId);
+    await verifyStoryOwner(ctx, storyId);
 
     // To ensure atomicity and prevent race conditions,
     // we perform all database writes sequentially without any `await` inside the loop.
@@ -305,13 +269,20 @@ export const reorderSegments = mutation({
     // We await all the promises at the end.
     // If any patch fails, Convex will automatically roll back the entire transaction.
     await Promise.all(updatePromises);
+    await ctx.scheduler.runAfter(
+      0,
+      internal.story.internalUpdateStoryThumbnail,
+      {
+        storyId,
+      },
+    );
   },
 });
 
 export const addSegment = mutation({
   args: { storyId: v.id("story") },
   handler: async (ctx, { storyId }) => {
-    await verifyStoryOwnerHelper(ctx, storyId);
+    await verifyStoryOwner(ctx, storyId);
 
     // Find the current highest order
     const lastSegment = await ctx.db
@@ -338,7 +309,7 @@ export const get = query({
   args: { id: v.id("segments") },
   handler: async (ctx, args) => {
     try {
-      const { segment } = await verifySegmentOwnerHelper(ctx, args.id);
+      const { segment } = await verifySegmentOwner(ctx, args.id);
 
       const selectedVersion = segment.selectedVersionId
         ? await ctx.db.get(segment.selectedVersionId)
@@ -357,7 +328,7 @@ export const regenerateImage = mutation({
     prompt: v.string(),
   },
   async handler(ctx, args) {
-    const { userId } = await verifySegmentOwnerHelper(ctx, args.segmentId);
+    const { userId } = await verifySegmentOwner(ctx, args.segmentId);
     await consumeCreditsHelper(ctx, userId, CREDIT_COSTS.IMAGE_GENERATION);
 
     await ctx.db.patch(args.segmentId, {
@@ -383,7 +354,7 @@ export const editImage = mutation({
     versionIdToEdit: v.id("imageVersions"),
   },
   async handler(ctx, args) {
-    const { userId } = await verifySegmentOwnerHelper(ctx, args.segmentId);
+    const { userId } = await verifySegmentOwner(ctx, args.segmentId);
 
     const versionToEdit = await ctx.db.get(args.versionIdToEdit);
     if (!versionToEdit || versionToEdit.segmentId !== args.segmentId) {

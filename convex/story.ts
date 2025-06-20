@@ -3,8 +3,6 @@ import {
   query,
   internalAction,
   internalMutation,
-  MutationCtx,
-  QueryCtx,
   internalQuery,
 } from "./_generated/server";
 import { prosemirrorSync } from "./prosemirror";
@@ -19,28 +17,10 @@ import {
 import { internal } from "./_generated/api";
 import { consumeCreditsHelper } from "./credits";
 import OpenAI from "openai";
-import { Id } from "./_generated/dataModel";
 import { nanoid } from "nanoid";
+import { verifyStoryOwner } from "./lib/auth";
 
 const openai = new OpenAI();
-
-async function verifyStoryOwnerHelper(
-  ctx: MutationCtx | QueryCtx,
-  storyId: Id<"story">,
-) {
-  const userId = await auth.getUserId(ctx);
-  if (!userId) {
-    throw new ConvexError("User not authenticated.");
-  }
-  const story = await ctx.db.get(storyId);
-  if (!story) {
-    throw new ConvexError("Story not found.");
-  }
-  if (story.userId !== userId) {
-    throw new ConvexError("User is not the owner of this story.");
-  }
-  return { story, userId };
-}
 
 export const updateStoryTitle = mutation({
   args: {
@@ -48,7 +28,7 @@ export const updateStoryTitle = mutation({
     title: v.string(),
   },
   handler: async (ctx, args) => {
-    await verifyStoryOwnerHelper(ctx, args.storyId);
+    await verifyStoryOwner(ctx, args.storyId);
     await ctx.db.patch(args.storyId, {
       title: args.title,
       updatedAt: Date.now(),
@@ -68,40 +48,9 @@ export const listPublic = query({
       .order("desc")
       .collect();
 
-    // As before, we augment stories with their thumbnail URLs.
-    const storiesWithThumbnails = await Promise.all(
-      stories.map(async (story) => {
-        const firstSegment = await ctx.db
-          .query("segments")
-          .withIndex("by_story_order", (q) => q.eq("storyId", story._id))
-          .order("asc")
-          .first();
-
-        let thumbnailUrl: string | null = null;
-        if (firstSegment?.selectedVersionId) {
-          const selectedVersion = await ctx.db.get(
-            firstSegment.selectedVersionId,
-          );
-          if (selectedVersion?.previewImage) {
-            try {
-              thumbnailUrl = await ctx.storage.getUrl(
-                selectedVersion.previewImage,
-              );
-            } catch (error) {
-              console.error(
-                `Failed to get URL for storage ID ${selectedVersion.previewImage}:`,
-                error,
-              );
-            }
-          }
-        }
-        return {
-          ...story,
-          thumbnailUrl,
-        };
-      }),
-    );
-    return storiesWithThumbnails;
+    // The N+1 query problem is solved!
+    // We can now return the stories directly as they already contain the `thumbnailUrl`.
+    return stories;
   },
 });
 
@@ -130,45 +79,9 @@ export const list = query({
 
     const stories = await queryBuilder.order("desc").collect();
 
-    // Augment each story with its thumbnail URL to avoid N+1 queries on the client.
-    const storiesWithThumbnails = await Promise.all(
-      stories.map(async (story) => {
-        // Find the first segment of the story.
-        const firstSegment = await ctx.db
-          .query("segments")
-          .withIndex("by_story_order", (q) => q.eq("storyId", story._id))
-          .order("asc")
-          .first();
-
-        let thumbnailUrl: string | null = null;
-        if (firstSegment?.selectedVersionId) {
-          // Use the ID to get the full imageVersion document.
-          const selectedVersion = await ctx.db.get(
-            firstSegment.selectedVersionId,
-          );
-
-          if (selectedVersion?.previewImage) {
-            try {
-              thumbnailUrl = await ctx.storage.getUrl(
-                selectedVersion.previewImage,
-              );
-            } catch (error) {
-              console.error(
-                `Failed to get URL for storage ID ${selectedVersion.previewImage}:`,
-                error,
-              );
-            }
-          }
-        }
-
-        // We explicitly type the return object to match the expected client-side structure.
-        return {
-          ...story,
-          thumbnailUrl,
-        };
-      }),
-    );
-    return storiesWithThumbnails;
+    // The N+1 query problem is solved!
+    // We can now return the stories directly as they already contain the `thumbnailUrl`.
+    return stories;
   },
 });
 
@@ -190,6 +103,7 @@ export const createStory = mutation({
       script: args.script ?? "",
       status: "draft",
       generationStatus: "idle",
+      thumbnailUrl: null,
     });
 
     return storyId;
@@ -199,7 +113,7 @@ export const createStory = mutation({
 export const initializeEditor = mutation({
   args: { storyId: v.id("story") },
   handler: async (ctx, args) => {
-    const { story } = await verifyStoryOwnerHelper(ctx, args.storyId);
+    const { story } = await verifyStoryOwner(ctx, args.storyId);
 
     const scriptText = story.script || "";
     const paragraphs = scriptText
@@ -235,10 +149,7 @@ export const getStory = query({
     }
 
     // For any other status (draft, archived, etc.), we MUST verify ownership.
-    const { story: verifiedStory } = await verifyStoryOwnerHelper(
-      ctx,
-      args.storyId,
-    );
+    const { story: verifiedStory } = await verifyStoryOwner(ctx, args.storyId);
     return verifiedStory;
   },
 });
@@ -253,7 +164,7 @@ export const updateStatus = mutation({
   },
   handler: async (ctx, args) => {
     // First, verify the user owns the story.
-    await verifyStoryOwnerHelper(ctx, args.storyId);
+    await verifyStoryOwner(ctx, args.storyId);
 
     // Now, patch the document with the new status.
     await ctx.db.patch(args.storyId, {
@@ -269,7 +180,7 @@ export const updateStylePrompt = mutation({
     stylePrompt: v.string(),
   },
   handler: async (ctx, args) => {
-    await verifyStoryOwnerHelper(ctx, args.storyId);
+    await verifyStoryOwner(ctx, args.storyId);
     await ctx.db.patch(args.storyId, {
       stylePrompt: args.stylePrompt,
       updatedAt: Date.now(),
@@ -281,7 +192,7 @@ export const deleteStory = mutation({
   args: { storyId: v.id("story") },
   handler: async (ctx, args) => {
     // 1. Verify ownership. This will throw an error if the user is not the owner.
-    await verifyStoryOwnerHelper(ctx, args.storyId);
+    await verifyStoryOwner(ctx, args.storyId);
 
     // 2. Get all segments for the story using the correct index name "by_story".
     const segments = await ctx.db
@@ -325,7 +236,7 @@ export const generateSegments = mutation({
   },
   handler: async (ctx, args) => {
     const { storyId, format } = args;
-    const { userId } = await verifyStoryOwnerHelper(ctx, storyId);
+    const { userId } = await verifyStoryOwner(ctx, storyId);
 
     const generationId = nanoid();
 
@@ -549,5 +460,58 @@ export const getStoryInternal = internalQuery({
   args: { storyId: v.id("story") },
   handler: async (ctx, args) => {
     return await ctx.db.get(args.storyId);
+  },
+});
+
+export const getFirstSegmentInternal = internalQuery({
+  args: { storyId: v.id("story") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("segments")
+      .withIndex("by_story_order", (q) => q.eq("storyId", args.storyId))
+      .order("asc")
+      .first();
+  },
+});
+
+export const setStoryThumbnailUrl = internalMutation({
+  args: {
+    storyId: v.id("story"),
+    thumbnailUrl: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, { storyId, thumbnailUrl }) => {
+    await ctx.db.patch(storyId, { thumbnailUrl });
+  },
+});
+
+export const internalUpdateStoryThumbnail = internalAction({
+  args: { storyId: v.id("story") },
+  handler: async (ctx, { storyId }) => {
+    const firstSegment = await ctx.runQuery(
+      internal.story.getFirstSegmentInternal,
+      { storyId },
+    );
+
+    let thumbnailUrl: string | null = null;
+    if (firstSegment?.selectedVersionId) {
+      const selectedVersion = await ctx.runQuery(
+        internal.imageVersions.getVersionInternal,
+        { versionId: firstSegment.selectedVersionId },
+      );
+      if (selectedVersion?.previewImage) {
+        try {
+          thumbnailUrl = await ctx.storage.getUrl(selectedVersion.previewImage);
+        } catch (e) {
+          console.error(
+            `Error getting URL for thumbnail for story ${storyId}`,
+            e,
+          );
+        }
+      }
+    }
+    await ctx.runMutation(internal.story.setStoryThumbnailUrl, {
+      storyId,
+      thumbnailUrl,
+    });
   },
 });

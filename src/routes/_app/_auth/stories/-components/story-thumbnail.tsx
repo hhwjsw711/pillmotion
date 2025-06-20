@@ -4,7 +4,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 
 interface StoryThumbnailProps {
-  thumbnailUrl: string | null;
+  thumbnailUrl: string | null | undefined;
   className?: string;
 }
 

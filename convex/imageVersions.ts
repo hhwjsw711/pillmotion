@@ -145,6 +145,19 @@ export const processUploadedImage = internalAction({
           "Failed to process uploaded image. It might be corrupted.",
       });
     }
+
+    const segment = await ctx.runQuery(internal.segments.getSegmentInternal, {
+      segmentId: args.segmentId,
+    });
+    if (segment && segment.order === 0) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.story.internalUpdateStoryThumbnail,
+        {
+          storyId: segment.storyId,
+        },
+      );
+    }
   },
 });
 
@@ -196,6 +209,15 @@ export const selectVersion = mutation({
     await ctx.db.patch(args.segmentId, {
       selectedVersionId: args.versionId,
     });
+    if (segment.order === 0) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.story.internalUpdateStoryThumbnail,
+        {
+          storyId: segment.storyId,
+        },
+      );
+    }
   },
 });
 

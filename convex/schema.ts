@@ -153,6 +153,7 @@ const schema = defineSchema({
     context: v.optional(v.string()),
     generationId: v.optional(v.string()),
     stylePrompt: v.optional(v.string()),
+    thumbnailUrl: v.optional(v.union(v.string(), v.null())),
   })
     .index("userId", ["userId"])
     .index("by_user_status", ["userId", "status"])
