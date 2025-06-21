@@ -74,21 +74,21 @@ export const createAndSelectVersion = internalMutation({
   args: {
     segmentId: v.id("segments"),
     userId: v.id("users"),
-    prompt: v.optional(v.string()),
+    prompt: v.string(),
     image: v.id("_storage"),
     previewImage: v.id("_storage"),
     source: imageVersionSourceValidator,
   },
-  async handler(ctx, args) {
-    const { segmentId, ...versionArgs } = args;
-    const newVersionId = await ctx.db.insert("imageVersions", {
-      segmentId,
-      ...versionArgs,
+  handler: async (ctx, args) => {
+    const versionId = await ctx.db.insert("imageVersions", {
+      ...args,
+      userIdString: args.userId,
     });
-    // 2. 使用新的辅助函数来完成选择和状态清理
-    await selectVersionHelper(ctx, { segmentId, versionId: newVersionId });
-
-    return newVersionId;
+    await selectVersionHelper(ctx, {
+      segmentId: args.segmentId,
+      versionId: versionId,
+    });
+    return versionId;
   },
 });
 
@@ -187,6 +187,7 @@ export const createVersionFromUpload = internalMutation({
     const newVersionId = await ctx.db.insert("imageVersions", {
       segmentId: args.segmentId,
       userId: args.userId,
+      userIdString: args.userId, // 新增：为上传的图片添加字符串ID
       image: args.originalImageId,
       previewImage: args.previewImageId,
       source: "user_uploaded",

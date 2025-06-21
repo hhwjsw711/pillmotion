@@ -1,6 +1,7 @@
 import { useConvexAuth } from "@convex-dev/react-query";
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { MediaLibraryModal } from "./_auth/-components/media-library";
 
 export const Route = createFileRoute("/_app/_auth")({
   component: AuthLayout,
@@ -21,5 +22,10 @@ function AuthLayout() {
     return null;
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      <MediaLibraryModal />
+    </>
+  );
 }

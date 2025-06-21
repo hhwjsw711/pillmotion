@@ -216,11 +216,21 @@ const schema = defineSchema({
   imageVersions: defineTable({
     segmentId: v.id("segments"),
     userId: v.id("users"),
+    userIdString: v.string(), // 新增
     prompt: v.optional(v.string()),
     image: v.id("_storage"),
     previewImage: v.id("_storage"),
     source: imageVersionSourceValidator,
-  }).index("by_segment", ["segmentId"]),
+    embedding: v.optional(v.array(v.float64())),
+  })
+    .index("by_segment", ["segmentId"])
+    .index("by_user", ["userId"]) // 保留此索引
+    .index("by_user_string", ["userIdString"]) // 新增此索引
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 768,
+      filterFields: ["userIdString"], // 更新过滤器
+    }),
   videoVersions: defineTable({
     storyId: v.id("story"),
     userId: v.id("users"),
@@ -235,6 +245,7 @@ const schema = defineSchema({
     videoVersionId: v.optional(v.id("videoVersions")),
     segmentId: v.id("segments"),
     userId: v.id("users"),
+    userIdString: v.string(),
     type: videoClipTypeValidator,
     sourceImageVersionId: v.optional(v.id("imageVersions")), // Start frame
     endImageVersionId: v.optional(v.id("imageVersions")), // End frame (for transitions)
@@ -245,9 +256,17 @@ const schema = defineSchema({
     processingStatus: v.optional(videoProcessingStatusValidator),
     generationId: v.optional(v.string()),
     statusMessage: v.optional(v.string()),
+    embedding: v.optional(v.array(v.float64())),
   })
     .index("by_segment", ["segmentId"])
-    .index("by_videoVersion", ["videoVersionId"]),
+    .index("by_videoVersion", ["videoVersionId"])
+    .index("by_user", ["userId"])
+    .index("by_user_string", ["userIdString"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 768,
+      filterFields: ["userIdString"],
+    }),
 });
 
 export default schema;

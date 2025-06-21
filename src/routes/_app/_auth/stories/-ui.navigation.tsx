@@ -1,4 +1,4 @@
-import { Settings, LogOut } from "lucide-react";
+import { Settings, LogOut, Library } from "lucide-react";
 import { cn, useSignOut } from "@/utils/misc";
 import { ThemeSwitcher } from "@/ui/theme-switcher";
 import { LanguageSwitcher } from "@/ui/language-switcher";
@@ -20,12 +20,14 @@ import { Route as BillingSettingsRoute } from "@/routes/_app/_auth/dashboard/_la
 import { User } from "~/types";
 import { Badge } from "@/ui/badge";
 import { useTranslation } from "react-i18next";
+import { useMediaLibraryStore } from "@/hooks/useMediaLibrary";
 
 export function Navigation({ user }: { user: User }) {
   const signOut = useSignOut();
   const matchRoute = useMatchRoute();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { open: openMediaLibrary } = useMediaLibraryStore();
   const isDashboardPath = matchRoute({ to: DashboardRoute.fullPath });
   const isGeneratePath = matchRoute({ to: GenerateRoute.fullPath });
   const isStoriesPath = matchRoute({ to: StoriesRoute.fullPath });
@@ -69,6 +71,14 @@ export function Navigation({ user }: { user: User }) {
               className="h-8 text-xs font-medium"
             >
               <Link to={BillingSettingsRoute.fullPath}>{t("buyMore")}</Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={openMediaLibrary}
+            >
+              <Library className="h-4 w-4" />
             </Button>
           </div>
           <DropdownMenu modal={false}>

@@ -151,6 +151,13 @@ export const getSegments = internalQuery({
   },
 });
 
+export const getVideoClipVersionInternal = internalQuery({
+  args: { versionId: v.id("videoClipVersions") },
+  async handler(ctx, { versionId }) {
+    return await ctx.db.get(versionId);
+  },
+});
+
 export const createVideoClipVersion = internalMutation({
   args: {
     type: videoClipTypeValidator,
@@ -170,6 +177,7 @@ export const createVideoClipVersion = internalMutation({
       type: args.type,
       segmentId: args.segmentId,
       userId: args.userId,
+      userIdString: args.userId, // 新增：将 Id 自动转换为 string
       sourceImageVersionId: args.sourceImageVersionId,
       endImageVersionId: args.endImageVersionId,
       generationStatus: args.generationStatus,

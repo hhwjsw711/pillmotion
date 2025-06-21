@@ -20,6 +20,7 @@ import type * as http from "../http.js";
 import type * as imageVersions from "../imageVersions.js";
 import type * as init from "../init.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as media from "../media.js";
 import type * as messages from "../messages.js";
 import type * as otp_ResendOTP from "../otp/ResendOTP.js";
 import type * as otp_VerificationCodeEmail from "../otp/VerificationCodeEmail.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   imageVersions: typeof imageVersions;
   init: typeof init;
   "lib/auth": typeof lib_auth;
+  media: typeof media;
   messages: typeof messages;
   "otp/ResendOTP": typeof otp_ResendOTP;
   "otp/VerificationCodeEmail": typeof otp_VerificationCodeEmail;

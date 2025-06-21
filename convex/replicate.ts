@@ -211,23 +211,26 @@ export const regenerateSegmentImageUsingPrompt = internalAction({
         new Blob([previewImageBuffer], { type: "image/jpeg" }),
       );
 
-      await ctx.runMutation(internal.imageVersions.createAndSelectVersion, {
-        segmentId: args.segmentId,
-        userId: story.userId,
-        prompt: finalPrompt,
-        image: storageId,
-        previewImage: previewStorageId,
-        source: "ai_generated",
-      });
-      if (segment.order === 0) {
-        await ctx.scheduler.runAfter(
-          0,
-          internal.story.internalUpdateStoryThumbnail,
-          {
-            storyId: segment.storyId,
-          },
-        );
-      }
+      const newImageVersionId = await ctx.runMutation(
+        internal.imageVersions.createAndSelectVersion,
+        {
+          segmentId: args.segmentId,
+          userId: story.userId,
+          prompt: finalPrompt,
+          image: storageId,
+          previewImage: previewStorageId,
+          source: "ai_generated",
+        },
+      );
+
+      await ctx.scheduler.runAfter(
+        0,
+        internal.media.generateEmbeddingForImage,
+        {
+          imageVersionId: newImageVersionId,
+        },
+      );
+      
       // On success, explicitly return true.
       return true;
     } catch (err) {
@@ -418,23 +421,25 @@ export const editSegmentImageUsingPrompt = internalAction({
         new Blob([previewImageBuffer], { type: "image/jpeg" }),
       );
 
-      await ctx.runMutation(internal.imageVersions.createAndSelectVersion, {
-        segmentId: args.segmentId,
-        userId: story.userId,
-        prompt: finalPrompt,
-        image: storageId,
-        previewImage: previewStorageId,
-        source: "ai_edited",
-      });
-      if (segment.order === 0) {
-        await ctx.scheduler.runAfter(
-          0,
-          internal.story.internalUpdateStoryThumbnail,
-          {
-            storyId: segment.storyId,
-          },
-        );
-      }
+      const newImageVersionId = await ctx.runMutation(
+        internal.imageVersions.createAndSelectVersion,
+        {
+          segmentId: args.segmentId,
+          userId: story.userId,
+          prompt: finalPrompt,
+          image: storageId,
+          previewImage: previewStorageId,
+          source: "ai_edited",
+        },
+      );
+
+      await ctx.scheduler.runAfter(
+        0,
+        internal.media.generateEmbeddingForImage,
+        {
+          imageVersionId: newImageVersionId,
+        },
+      );
     } catch (err) {
       const error = err as Error;
       console.error(error.message);
@@ -535,6 +540,14 @@ export const generateVideoClip = internalAction({
         segmentId: args.segmentId,
         videoClipVersionId: videoClipVersionId,
       });
+
+      await ctx.scheduler.runAfter(
+        0,
+        internal.media.generateEmbeddingForVideo,
+        {
+          videoClipVersionId: videoClipVersionId,
+        },
+      );
 
       return { success: true };
     } catch (error: any) {
