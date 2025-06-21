@@ -6,12 +6,12 @@ import { v, Infer } from "convex/values";
 export const CREDIT_COSTS = {
   CHAT_COMPLETION: 1,
   IMAGE_GENERATION: 10,
-  VIDEO_GENERATION: 100,
+  VIDEO_CLIP_GENERATION: 100,
 } as const;
 export const creditCostValidator = v.union(
   v.literal(CREDIT_COSTS.CHAT_COMPLETION),
   v.literal(CREDIT_COSTS.IMAGE_GENERATION),
-  v.literal(CREDIT_COSTS.VIDEO_GENERATION),
+  v.literal(CREDIT_COSTS.VIDEO_CLIP_GENERATION),
 );
 export type CreditCost = Infer<typeof creditCostValidator>;
 
@@ -95,7 +95,7 @@ export const imageVersionSourceValidator = v.union(
 );
 export type ImageVersionSource = Infer<typeof imageVersionSourceValidator>;
 
-export const videoGenerationStatusValidator = v.union(
+export const storyVideoGenerationStatusValidator = v.union(
   v.literal("idle"),
   v.literal("pending"),
   v.literal("generating_clips"),
@@ -103,8 +103,18 @@ export const videoGenerationStatusValidator = v.union(
   v.literal("generated"),
   v.literal("error"),
 );
-export type VideoGenerationStatus = Infer<
-  typeof videoGenerationStatusValidator
+export type StoryVideoGenerationStatus = Infer<
+  typeof storyVideoGenerationStatusValidator
+>;
+
+export const videoClipGenerationStatusValidator = v.union(
+  v.literal("pending"),
+  v.literal("generating"),
+  v.literal("generated"),
+  v.literal("error"),
+);
+export type VideoClipGenerationStatus = Infer<
+  typeof videoClipGenerationStatusValidator
 >;
 
 export const videoProcessingStatusValidator = v.union(
@@ -119,6 +129,13 @@ export const videoVersionSourceValidator = v.union(
   v.literal("user_uploaded"),
 );
 export type VideoVersionSource = Infer<typeof videoVersionSourceValidator>;
+
+export const videoClipTypeValidator = v.union(
+  v.literal("image-to-video"),
+  v.literal("text-to-video"),
+  v.literal("transition"),
+);
+export type VideoClipType = Infer<typeof videoClipTypeValidator>;
 
 const schema = defineSchema({
   ...authTables,
@@ -209,20 +226,22 @@ const schema = defineSchema({
     userId: v.id("users"),
     storageId: v.optional(v.id("_storage")),
     source: videoVersionSourceValidator,
-    generationStatus: videoGenerationStatusValidator,
+    generationStatus: storyVideoGenerationStatusValidator,
     processingStatus: v.optional(videoProcessingStatusValidator),
     generationId: v.optional(v.string()),
     statusMessage: v.optional(v.string()),
   }).index("by_story", ["storyId"]),
   videoClipVersions: defineTable({
-    videoVersionId: v.id("videoVersions"),
+    videoVersionId: v.optional(v.id("videoVersions")),
     segmentId: v.id("segments"),
     userId: v.id("users"),
+    type: videoClipTypeValidator,
+    sourceImageVersionId: v.optional(v.id("imageVersions")), // Start frame
+    endImageVersionId: v.optional(v.id("imageVersions")), // End frame (for transitions)
     storageId: v.optional(v.id("_storage")),
     source: videoVersionSourceValidator,
-    sourceImageVersionId: v.optional(v.id("imageVersions")),
     prompt: v.optional(v.string()),
-    generationStatus: videoGenerationStatusValidator,
+    generationStatus: videoClipGenerationStatusValidator, // Use the new validator
     processingStatus: v.optional(videoProcessingStatusValidator),
     generationId: v.optional(v.string()),
     statusMessage: v.optional(v.string()),

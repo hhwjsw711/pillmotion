@@ -450,86 +450,68 @@ export const editSegmentImageUsingPrompt = internalAction({
 export const generateVideoClip = internalAction({
   args: {
     segmentId: v.id("segments"),
-    videoVersionId: v.id("videoVersions"), // 我们需要这个来追踪整体任务
+    imageVersionId: v.id("imageVersions"),
+    videoVersionId: v.optional(v.id("videoVersions")),
   },
-  handler: async (
-    ctx,
-    { segmentId, videoVersionId },
-  ): Promise<{ success: boolean; error?: string }> => {
-    // 1. 获取此场景（segment）的详细信息
-    const segment = await ctx.runQuery(internal.segments.getSegmentInternal, {
-      segmentId,
-    });
-    if (!segment) {
-      // 如果找不到场景，就无法继续。
-      const errorMsg = `Segment not found: ${segmentId}`;
-      console.error(errorMsg);
-      return { success: false, error: errorMsg };
-    }
-
-    // 2. 获取这个场景所选定的图片版本
-    if (!segment.selectedVersionId) {
-      const errorMsg = `Segment ${segmentId} has no selected image version.`;
-      console.error(errorMsg);
-      return { success: false, error: errorMsg };
-    }
-    const imageVersion = await ctx.runQuery(
-      internal.imageVersions.getVersionInternal,
-      { versionId: segment.selectedVersionId },
-    );
-    if (!imageVersion) {
-      const errorMsg = `Image version not found: ${segment.selectedVersionId}`;
-      console.error(errorMsg);
-      return { success: false, error: errorMsg };
-    }
-
-    // 3. 获取故事的全局信息，比如 stylePrompt
-    const story = await ctx.runQuery(internal.story.getStoryInternal, {
-      storyId: segment.storyId,
-    });
-    if (!story) {
-      const errorMsg = `Story not found for segment: ${segmentId}`;
-      console.error(errorMsg);
-      return { success: false, error: errorMsg };
-    }
-
-    let videoPrompt: string | undefined;
+  handler: async (ctx, args) => {
+    let videoClipVersionId: Id<"videoClipVersions"> | null = null;
 
     try {
-      // 4. 获取图片的公开 URL，作为视频生成的起始图片
-      const startImageUrl = await ctx.storage.getUrl(imageVersion.image);
+      // 步骤 1: 调用位于 segments.ts 中的 query 来安全地获取数据
+      const data = await ctx.runQuery(
+        internal.segments.getVideoClipGenerationData,
+        {
+          segmentId: args.segmentId,
+          imageVersionId: args.imageVersionId,
+        },
+      );
+
+      if (!data.imageVersion.image) {
+        throw new Error("Source image version does not have a stored image.");
+      }
+      const startImageUrl = await ctx.storage.getUrl(data.imageVersion.image);
       if (!startImageUrl) {
         throw new Error("Could not get URL for start image.");
       }
 
-      // 5. NEW: 调用“AI导演”来将场景文本转换为详细的视频 prompt
-      videoPrompt = await generateVideoPrompt(segment.text, story.stylePrompt);
+      // 步骤 2: 生成视频 prompt
+      const videoPrompt = await generateVideoPrompt(
+        data.segmentText,
+        data.storyStyle,
+      );
 
-      // 6. 准备调用 Replicate 的输入
+      // 步骤 3: 创建一个 videoClipVersion 记录，初始状态为 "generating"
+      videoClipVersionId = await ctx.runMutation(
+        internal.segments.createVideoClipVersion,
+        {
+          type: "image-to-video",
+          segmentId: args.segmentId,
+          userId: data.userId,
+          sourceImageVersionId: args.imageVersionId,
+          videoVersionId: args.videoVersionId, // 如果是批量任务，这里会有值
+          generationStatus: "generating",
+          prompt: videoPrompt,
+        },
+      );
+
+      // 步骤 4: 调用 Replicate API
       const input = {
-        prompt: videoPrompt, // 使用新生成的、包含镜头语言的 prompt
+        prompt: videoPrompt,
         start_image: startImageUrl,
         mode: "standard",
         duration: 5,
         negative_prompt:
           "low quality, bad quality, blurry, pixelated, cgi, fake, unreal, cartoon, drawing, illustration, watermark",
       };
+      const output = await replicate.run("kwaivgi/kling-v2.1", { input });
 
-      // 7. 调用 "可灵" 模型。根据您提供的 Schema，它返回一个视频文件的 URL。
-      const output = await replicate.run("kwaivgi/kling-v2.1", {
-        input,
-      });
-
-      // 使用 String() 来安全地将返回值转换为字符串，避免 TypeScript 报错。
+      // ... [校验 output, fetch 视频, 存入 storage 的逻辑保持不变] ...
       const outputUrl = String(output);
-
       if (!outputUrl || typeof outputUrl !== "string") {
         throw new Error(
           `Replicate did not return a valid URL string. Got: ${outputUrl}`,
         );
       }
-
-      // 7. 从返回的 URL 下载视频数据
       const videoResponse = await fetch(outputUrl);
       if (!videoResponse.ok) {
         throw new Error(
@@ -537,49 +519,40 @@ export const generateVideoClip = internalAction({
         );
       }
       const videoBuffer = await videoResponse.arrayBuffer();
-
-      // 8. 将下载的视频数据存入 Convex 文件系统
       const videoStorageId = await ctx.storage.store(
         new Blob([videoBuffer], { type: "video/mp4" }),
       );
 
-      // 9. 在 videoClipVersions 表中创建一条新版本记录
-      const videoClipVersionId = await ctx.runMutation(
-        internal.segments.createVideoClipVersion,
-        {
-          videoVersionId: videoVersionId,
-          segmentId: segment._id,
-          userId: story.userId,
-          storageId: videoStorageId,
-          generationStatus: "generated",
-          sourceImageVersionId: imageVersion._id,
-          prompt: videoPrompt,
-        },
-      );
+      // 步骤 5: 更新记录为 "generated"
+      await ctx.runMutation(internal.segments.updateVideoClipVersion, {
+        videoClipVersionId,
+        storageId: videoStorageId,
+        generationStatus: "generated",
+      });
 
-      // 10. 将新创建的视频片段版本 ID 关联到对应的场景上
-      await ctx.runMutation(internal.segments.updateSegmentWithVideo, {
-        segmentId: segment._id,
+      // 步骤 6: 将新生成的视频设置为场景的当前选中版本
+      await ctx.runMutation(internal.segments.internalLinkVideoToSegment, {
+        segmentId: args.segmentId,
         videoClipVersionId: videoClipVersionId,
       });
+
       return { success: true };
     } catch (error: any) {
       const errorMessage =
         error.message || "Unknown error during video clip generation.";
       console.error(
-        `Failed to generate video clip for segment ${segmentId}:`,
+        `Failed to generate video clip for segment ${args.segmentId}:`,
         error,
       );
-      // 在 videoClipVersions 中创建一条失败的记录，方便追踪哪个片段失败了
-      await ctx.runMutation(internal.segments.createVideoClipVersion, {
-        videoVersionId: videoVersionId,
-        segmentId: segment._id,
-        userId: story.userId,
-        generationStatus: "error",
-        statusMessage: errorMessage,
-        sourceImageVersionId: imageVersion?._id,
-        prompt: videoPrompt,
-      });
+
+      // 步骤 7 (Catch): 如果出错，也要更新记录状态
+      if (videoClipVersionId) {
+        await ctx.runMutation(internal.segments.updateVideoClipVersion, {
+          videoClipVersionId,
+          generationStatus: "error",
+          statusMessage: errorMessage,
+        });
+      }
       return { success: false, error: errorMessage };
     }
   },

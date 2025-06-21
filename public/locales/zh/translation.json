@@ -180,5 +180,11 @@
   "generating_clips": "正在生成片段",
   "merging_clips": "正在合并片段",
   "videoReady": "视频已就绪",
-  "videoFailed": "视频生成失败"
+  "videoFailed": "视频生成失败",
+  "buttonGenerateVideoClip": "生成片段",
+  "toastVideoClipGenerationStarted": "视频片段已开始生成。",
+  "toastVideoClipGenerationFailed": "启动视频片段生成失败。",
+  "videoClipsCount": "视频片段 ({{count}})",
+  "videoClipGenFailed": "生成失败",
+  "videoClipTitle": "视频片段"
 }

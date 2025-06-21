@@ -180,5 +180,11 @@
   "generating_clips": "Generating clips",
   "merging_clips": "Merging clips",
   "videoReady": "Video Ready",
-  "videoFailed": "Video Failed"
+  "videoFailed": "Video Failed",
+  "buttonGenerateVideoClip": "Generate Clip",
+  "toastVideoClipGenerationStarted": "Video clip generation has started.",
+  "toastVideoClipGenerationFailed": "Failed to start video clip generation.",
+  "videoClipsCount": "Video Clips ({{count}})",
+  "videoClipGenFailed": "Clip Failed",
+  "videoClipTitle": "Video Clip"
 }

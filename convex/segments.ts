@@ -7,7 +7,11 @@ import {
 } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { CREDIT_COSTS, videoGenerationStatusValidator } from "./schema";
+import {
+  CREDIT_COSTS,
+  videoClipGenerationStatusValidator,
+  videoClipTypeValidator,
+} from "./schema";
 import OpenAI from "openai";
 import { Doc, Id } from "./_generated/dataModel";
 import { consumeCreditsHelper } from "./credits";
@@ -62,19 +66,46 @@ export const deleteSegment = mutation({
       segmentId,
     );
 
-    const imageVersions = await ctx.db
-      .query("imageVersions")
-      .withIndex("by_segment", (q) => q.eq("segmentId", segmentId))
-      .collect();
+    // 步骤 1: 并发获取所有相关的文档
+    const [imageVersions, videoClipVersions] = await Promise.all([
+      ctx.db
+        .query("imageVersions")
+        .withIndex("by_segment", (q) => q.eq("segmentId", segmentId))
+        .collect(),
+      ctx.db
+        .query("videoClipVersions")
+        .withIndex("by_segment", (q) => q.eq("segmentId", segmentId))
+        .collect(),
+    ]);
+
+    // 步骤 2: 聚合所有删除操作到一个类型兼容的数组中
+    const deletionPromises: Promise<void | null>[] = [];
 
     for (const version of imageVersions) {
-      if (version.image) await ctx.storage.delete(version.image);
-      if (version.previewImage) await ctx.storage.delete(version.previewImage);
-      await ctx.db.delete(version._id);
+      if (version.image) {
+        deletionPromises.push(ctx.storage.delete(version.image));
+      }
+      if (version.previewImage) {
+        deletionPromises.push(ctx.storage.delete(version.previewImage));
+      }
+      deletionPromises.push(ctx.db.delete(version._id));
     }
 
-    await ctx.db.delete(segmentId);
+    for (const clip of videoClipVersions) {
+      if (clip.storageId) {
+        deletionPromises.push(ctx.storage.delete(clip.storageId));
+      }
+      deletionPromises.push(ctx.db.delete(clip._id));
+    }
 
+    // 将 segment 本身加入删除队列
+    deletionPromises.push(ctx.db.delete(segmentId));
+
+    // 步骤 3: 并行执行所有删除。
+    // Convex mutation 是事务性的, 所以这是一个“全有或全无”的操作。
+    await Promise.all(deletionPromises);
+
+    // 步骤 4: 重新排序后续的 segments
     const subsequentSegments = await ctx.db
       .query("segments")
       .withIndex("by_story_order", (q) =>
@@ -84,9 +115,14 @@ export const deleteSegment = mutation({
       .order("asc")
       .collect();
 
-    for (const segment of subsequentSegments) {
-      await ctx.db.patch(segment._id, { order: segment.order - 1 });
-    }
+    // 在一个事务中更新所有后续 segment 的 order
+    await Promise.all(
+      subsequentSegments.map((segment) =>
+        ctx.db.patch(segment._id, { order: segment.order - 1 }),
+      ),
+    );
+
+    // 步骤 5: 更新故事的封面图
     await ctx.scheduler.runAfter(
       0,
       internal.story.internalUpdateStoryThumbnail,
@@ -117,41 +153,114 @@ export const getSegments = internalQuery({
 
 export const createVideoClipVersion = internalMutation({
   args: {
-    videoVersionId: v.id("videoVersions"),
+    type: videoClipTypeValidator,
     segmentId: v.id("segments"),
     userId: v.id("users"),
-    storageId: v.optional(v.id("_storage")),
     sourceImageVersionId: v.optional(v.id("imageVersions")),
+    endImageVersionId: v.optional(v.id("imageVersions")),
+    generationStatus: videoClipGenerationStatusValidator,
+    // --- Optional fields that might be added later by the generation task ---
+    videoVersionId: v.optional(v.id("videoVersions")),
+    storageId: v.optional(v.id("_storage")),
     prompt: v.optional(v.string()),
-    generationStatus: videoGenerationStatusValidator,
     statusMessage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("videoClipVersions", {
-      videoVersionId: args.videoVersionId,
+      type: args.type,
       segmentId: args.segmentId,
       userId: args.userId,
-      storageId: args.storageId,
       sourceImageVersionId: args.sourceImageVersionId,
-      prompt: args.prompt,
+      endImageVersionId: args.endImageVersionId,
       generationStatus: args.generationStatus,
+      videoVersionId: args.videoVersionId,
+      storageId: args.storageId,
+      prompt: args.prompt,
       statusMessage: args.statusMessage,
       source: "ai_generated",
-      // 初始化其他可选字段
+      // Initialize other optional fields
       processingStatus: "idle",
     });
   },
 });
 
-export const updateSegmentWithVideo = internalMutation({
+export const updateVideoClipVersion = internalMutation({
+  args: {
+    videoClipVersionId: v.id("videoClipVersions"),
+    storageId: v.optional(v.id("_storage")),
+    generationStatus: v.optional(videoClipGenerationStatusValidator),
+    statusMessage: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { videoClipVersionId, ...rest } = args;
+    await ctx.db.patch(videoClipVersionId, rest);
+  },
+});
+
+export const selectVideoClipVersion = mutation({
   args: {
     segmentId: v.id("segments"),
     videoClipVersionId: v.id("videoClipVersions"),
   },
   handler: async (ctx, { segmentId, videoClipVersionId }) => {
+    // CORRECT: Public mutations MUST have authorization checks.
+    await verifySegmentOwner(ctx, segmentId);
+
+    const videoClipVersion = await ctx.db.get(videoClipVersionId);
+    if (!videoClipVersion || videoClipVersion.segmentId !== segmentId) {
+      throw new Error("Invalid video clip version for this segment.");
+    }
     await ctx.db.patch(segmentId, {
       selectedVideoClipVersionId: videoClipVersionId,
     });
+  },
+});
+
+export const internalLinkVideoToSegment = internalMutation({
+  args: {
+    segmentId: v.id("segments"),
+    videoClipVersionId: v.id("videoClipVersions"),
+  },
+  handler: async (ctx, { segmentId, videoClipVersionId }) => {
+    // CORRECT: Internal mutations are trusted, no auth check needed.
+    // Data integrity check is still a good practice.
+    const videoClipVersion = await ctx.db.get(videoClipVersionId);
+    if (!videoClipVersion || videoClipVersion.segmentId !== segmentId) {
+      throw new Error("Invalid video clip version for this segment.");
+    }
+    await ctx.db.patch(segmentId, {
+      selectedVideoClipVersionId: videoClipVersionId,
+    });
+  },
+});
+
+export const getVideoClipGenerationData = internalQuery({
+  args: {
+    segmentId: v.id("segments"),
+    imageVersionId: v.id("imageVersions"),
+  },
+  handler: async (ctx, { segmentId, imageVersionId }) => {
+    const segment = await ctx.db.get(segmentId);
+    if (!segment) throw new Error("Segment not found");
+
+    const imageVersion = await ctx.db.get(imageVersionId);
+    if (!imageVersion) throw new Error("Image version not found");
+
+    if (imageVersion.segmentId !== segmentId) {
+      throw new Error(
+        "Image version does not belong to the specified segment.",
+      );
+    }
+
+    const story = await ctx.db.get(segment.storyId);
+    if (!story) throw new Error("Story not found for segment");
+
+    return {
+      userId: story.userId,
+      segmentText: segment.text,
+      imageVersion: imageVersion,
+      storyStyle: story.stylePrompt,
+    };
   },
 });
 
@@ -165,13 +274,37 @@ export const getSegmentEditorData = query({
 
     await verifyStoryOwner(ctx, segment.storyId);
 
+    // 1. 获取所有图片版本
     const imageVersions = await ctx.db
       .query("imageVersions")
       .withIndex("by_segment", (q) => q.eq("segmentId", args.segmentId))
       .order("desc")
       .collect();
 
-    const imageVersionsWithUrls = await Promise.all(
+    // 2. 获取所有视频片段版本
+    const videoClipVersions = await ctx.db
+      .query("videoClipVersions")
+      .withIndex("by_segment", (q) => q.eq("segmentId", args.segmentId))
+      .order("desc")
+      .collect();
+
+    // 3. 将视频版本按其源图片ID进行分组
+    const videoVersionsBySourceImage = videoClipVersions.reduce(
+      (acc, videoVersion) => {
+        const sourceId = videoVersion.sourceImageVersionId;
+        if (sourceId) {
+          if (!acc[sourceId]) {
+            acc[sourceId] = [];
+          }
+          acc[sourceId].push(videoVersion);
+        }
+        return acc;
+      },
+      {} as Record<Id<"imageVersions">, Doc<"videoClipVersions">[]>,
+    );
+
+    // 4. 为图片版本附加URL和其子视频版本
+    const imageVersionsWithData = await Promise.all(
       imageVersions.map(async (version) => {
         const [imageUrl, previewImageUrl] = await Promise.all([
           version.image ? ctx.storage.getUrl(version.image) : null,
@@ -179,28 +312,49 @@ export const getSegmentEditorData = query({
             ? ctx.storage.getUrl(version.previewImage)
             : null,
         ]);
-        return { ...version, imageUrl, previewImageUrl };
+        return {
+          ...version,
+          imageUrl,
+          previewImageUrl,
+          videoSubVersions: videoVersionsBySourceImage[version._id] ?? [],
+        };
       }),
     );
 
-    let videoClipData = null;
+    // 5. 获取当前主预览区需要显示的视频URL（逻辑保持，但数据源改变）
+    let mainDisplayVideo = null;
     if (segment.selectedVideoClipVersionId) {
-      const videoClipVersion = await ctx.db.get(
-        segment.selectedVideoClipVersionId,
+      const videoClipVersion = videoClipVersions.find(
+        (v) => v._id === segment.selectedVideoClipVersionId,
       );
       if (videoClipVersion?.storageId) {
         const url = await ctx.storage.getUrl(videoClipVersion.storageId);
-        videoClipData = {
+        mainDisplayVideo = {
           ...videoClipVersion,
           url,
         };
       }
     }
 
+    // 6. 获取当前主预览区需要显示的图片URL
+    let mainDisplayImage = null;
+    if (segment.selectedVersionId) {
+      const imageVersion = imageVersionsWithData.find(
+        (v) => v._id === segment.selectedVersionId,
+      );
+      if (imageVersion?.imageUrl) {
+        mainDisplayImage = {
+          ...imageVersion,
+          url: imageVersion.imageUrl,
+        };
+      }
+    }
+
     return {
       segment,
-      imageVersions: imageVersionsWithUrls,
-      videoClip: videoClipData,
+      imageVersions: imageVersionsWithData,
+      videoClip: mainDisplayVideo,
+      image: mainDisplayImage,
     };
   },
 });
@@ -505,5 +659,30 @@ export const editImage = mutation({
         originalPrompt: versionToEdit.prompt,
       },
     );
+  },
+});
+
+export const generateVideoClipForSegment = mutation({
+  args: {
+    type: v.literal("image-to-video"),
+    imageVersionId: v.id("imageVersions"),
+  },
+  handler: async (ctx, args) => {
+    const imageVersion = await ctx.db.get(args.imageVersionId);
+    if (!imageVersion || !imageVersion.segmentId) {
+      throw new Error("Image version not found or not linked to a segment.");
+    }
+
+    const { userId } = await verifySegmentOwner(ctx, imageVersion.segmentId);
+
+    await consumeCreditsHelper(ctx, userId, CREDIT_COSTS.VIDEO_CLIP_GENERATION);
+
+    // 不再在这里创建 videoClipVersion 记录。
+    // 将所有生成逻辑委托给 action。
+    await ctx.scheduler.runAfter(0, internal.replicate.generateVideoClip, {
+      segmentId: imageVersion.segmentId,
+      imageVersionId: args.imageVersionId,
+      // 注意：这里不传递 videoVersionId，因为这是一个独立的片段生成任务。
+    });
   },
 });

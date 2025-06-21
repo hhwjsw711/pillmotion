@@ -13,7 +13,7 @@ import {
   storyStatusValidator,
   CREDIT_COSTS,
   storyGenerationStatusValidator,
-  videoGenerationStatusValidator,
+  storyVideoGenerationStatusValidator,
 } from "./schema";
 import { internal } from "./_generated/api";
 import { consumeCreditsHelper } from "./credits";
@@ -267,6 +267,18 @@ export const generateVideo = mutation({
     // 2. 为这次生成创建一个唯一的 ID
     const generationId = nanoid();
 
+    const segments = await ctx.db
+      .query("segments")
+      .withIndex("by_story", (q) => q.eq("storyId", storyId))
+      .collect();
+
+    if (segments.length === 0) {
+      throw new ConvexError("This story has no scenes to generate video from.");
+    }
+    const totalCost = segments.length * CREDIT_COSTS.VIDEO_CLIP_GENERATION;
+
+    await consumeCreditsHelper(ctx, userId, totalCost);
+
     // 3. 在 videoVersions 表中创建一条新的记录来代表这次生成任务
     const videoVersionId = await ctx.db.insert("videoVersions", {
       storyId: storyId,
@@ -280,9 +292,6 @@ export const generateVideo = mutation({
     await ctx.db.patch(storyId, {
       selectedVideoVersionId: videoVersionId,
     });
-
-    // 5. TODO: 扣除生成视频所需的积分
-    await consumeCreditsHelper(ctx, userId, CREDIT_COSTS.VIDEO_GENERATION);
 
     // 6. 调度一个后台 action 来开始真正的视频生成工作
     await ctx.scheduler.runAfter(0, internal.story.generateVideoOrchestrator, {
@@ -325,12 +334,23 @@ export const generateVideoOrchestrator = internalAction({
       }
 
       // 3. 为每个场景都启动一个独立的视频片段生成任务
-      const clipGenerationPromises = segments.map((segment) =>
-        ctx.runAction(internal.replicate.generateVideoClip, {
+      const clipGenerationPromises = segments.map((segment) => {
+        if (!segment.selectedVersionId) {
+          // 如果某个场景没有选中的图片，就返回一个失败的 promise
+          console.error(
+            `Segment ${segment._id} has no selected image, skipping.`,
+          );
+          return Promise.resolve({
+            success: false,
+            error: "No image selected",
+          });
+        }
+        return ctx.runAction(internal.replicate.generateVideoClip, {
           segmentId: segment._id,
           videoVersionId: videoVersionId,
-        }),
-      );
+          imageVersionId: segment.selectedVersionId, // <-- 关键修正：传入 imageVersionId
+        });
+      });
 
       // 4. 等待所有片段生成任务完成
       const clipGenerationResults = await Promise.all(clipGenerationPromises);
@@ -376,7 +396,7 @@ export const generateVideoOrchestrator = internalAction({
 export const updateVideoVersionStatus = internalMutation({
   args: {
     videoVersionId: v.id("videoVersions"),
-    status: videoGenerationStatusValidator,
+    status: storyVideoGenerationStatusValidator,
     statusMessage: v.optional(v.string()),
   },
   handler: async (ctx, { videoVersionId, status, statusMessage }) => {

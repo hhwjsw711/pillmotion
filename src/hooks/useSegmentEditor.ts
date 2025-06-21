@@ -1,44 +1,62 @@
 import { useState, useMemo, useEffect } from "react";
-import { useQuery, useMutation as useTanstackMutation } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation as useTanstackMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useConvexMutation, convexQuery } from "@convex-dev/react-query";
 import { api } from "~/convex/_generated/api";
 import { Id, Doc } from "~/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
-// This type definition now includes the full image URL.
-export type VersionWithUrl = Doc<"imageVersions"> & {
+// The data structure for an image version, now including its video children
+export type ImageVersionWithSubVersions = Doc<"imageVersions"> & {
   imageUrl: string | null;
   previewImageUrl: string | null;
+  videoSubVersions: Doc<"videoClipVersions">[];
 };
+
+export type DisplayMode = "image" | "video";
 
 export function useSegmentEditor(segmentId: Id<"segments">) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
 
-  // 1. UNIFIED DATA FETCHING
-  // We now use our new, efficient query to get all data at once.
-  const { data, isLoading } = useQuery(
+  // 1. DATA FETCHING (Unchanged)
+  const { data, isLoading, refetch } = useQuery(
     convexQuery(api.segments.getSegmentEditorData, { segmentId }),
   );
 
-  // Derive all data from the single query result.
   const segment = data?.segment;
-  const versions = data?.imageVersions;
+  const imageVersions = data?.imageVersions;
   const videoClip = data?.videoClip;
+  const image = data?.image;
 
-  const selectedVersion = useMemo(
-    () => versions?.find((v) => v._id === segment?.selectedVersionId),
-    [versions, segment?.selectedVersionId],
+  const [displayMode, setDisplayMode] = useState<DisplayMode>("image");
+
+  const selectedImageVersion = useMemo(
+    () => imageVersions?.find((v) => v._id === segment?.selectedVersionId),
+    [imageVersions, segment?.selectedVersionId],
   );
 
-  const imageUrl = selectedVersion?.imageUrl;
-  const videoClipUrl = videoClip?.url; // The video URL is now available.
+  const imageUrl = image?.url;
+  const videoClipUrl = videoClip?.url;
+
+  useEffect(() => {
+    // 当数据加载或刷新时，根据后端返回的选中状态，智能地决定初始显示模式
+    if (segment?.selectedVideoClipVersionId && videoClipUrl) {
+      setDisplayMode("video");
+    } else {
+      setDisplayMode("image");
+    }
+  }, [segment?.selectedVideoClipVersionId, videoClipUrl]);
 
   // 2. STATE MANAGEMENT (Unchanged)
   const [promptText, setPromptText] = useState("");
   const [tuningPrompt, setTuningPrompt] = useState("");
 
-  // 3. MUTATIONS (Your existing mutations are preserved)
+  // 3. MUTATIONS (Corrected to the right pattern)
   const { mutateAsync: regenerateImage, isPending: isRegenerating } =
     useTanstackMutation({
       mutationFn: useConvexMutation(api.segments.regenerateImage),
@@ -48,37 +66,65 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
     mutationFn: useConvexMutation(api.segments.editImage),
   });
 
-  const { mutate: selectVersion, isPending: isSelecting } = useTanstackMutation({
-    mutationFn: useConvexMutation(api.imageVersions.selectVersion),
-    onSuccess: () => toast.success(t("toastVersionSelected")),
-    onError: (err) => {
-      toast.error(t("toastVersionSelectFailed"));
-      console.error(err);
+  const { mutateAsync: selectImage, isPending: isSelectingImage } =
+    useTanstackMutation({
+      mutationFn: useConvexMutation(api.imageVersions.selectVersion),
+    });
+
+  const { mutateAsync: selectVideo, isPending: isSelectingVideo } =
+    useTanstackMutation({
+      mutationFn: useConvexMutation(api.segments.selectVideoClipVersion),
+    });
+
+  const {
+    mutateAsync: generateVideoForImage,
+    isPending: isGeneratingVideo,
+    variables: generatingVideoVariables,
+  } = useTanstackMutation({
+    mutationFn: useConvexMutation(api.segments.generateVideoClipForSegment),
+    onSuccess: () => {
+      toast.success(t("toastVideoClipGenerationStarted"));
+      queryClient.invalidateQueries({
+        queryKey: convexQuery(api.segments.getSegmentEditorData, {
+          segmentId,
+        }).queryKey,
+      });
+    },
+    onError: (error) => {
+      toast.error(t("toastVideoClipGenerationFailed"), {
+        description: error.message,
+      });
     },
   });
 
-  // 4. DERIVED STATE (Unchanged)
-  const isProcessing = segment?.isGenerating || isRegenerating || isEditing;
+  const isSelecting = isSelectingImage || isSelectingVideo;
 
-  // 5. SIDE EFFECTS (Your existing effects are preserved)
+  // 4. DERIVED STATE (Unchanged)
+  const isProcessing =
+    segment?.isGenerating || isRegenerating || isEditing || isGeneratingVideo;
+
+  // 5. SIDE EFFECTS (Unchanged, but good)
   useEffect(() => {
-    if (selectedVersion?.prompt) {
-      setPromptText(selectedVersion.prompt);
-    } else {
-      const latestAiVersion = versions?.find((v) => v.source === "ai_generated");
+    if (selectedImageVersion?.prompt) {
+      setPromptText(selectedImageVersion.prompt);
+    } else if (imageVersions && imageVersions.length > 0) {
+      const latestAiVersion = imageVersions.find(
+        (v) => v.source === "ai_generated",
+      );
       setPromptText(latestAiVersion?.prompt ?? "");
     }
-  }, [selectedVersion, versions]);
+  }, [selectedImageVersion, imageVersions]);
 
   useEffect(() => {
     if (segment?.isGenerating === false && segment.error) {
       toast.error(t("toastImageProcessFailed"), {
         description: segment.error,
       });
+      refetch(); // Refetch data on error to get updated status
     }
-  }, [segment?.isGenerating, segment?.error, t]);
+  }, [segment?.isGenerating, segment?.error, t, refetch]);
 
-  // 6. EVENT HANDLERS (Your existing handlers are preserved)
+  // 6. EVENT HANDLERS (Now work correctly with the fixed mutations)
   const handleRegenerate = async () => {
     if (!promptText.trim()) return toast.error(t("toastPromptEmpty"));
     await regenerateImage({ segmentId, prompt: promptText });
@@ -87,34 +133,68 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
 
   const handleEditImage = async () => {
     if (!tuningPrompt.trim()) return toast.error(t("toastEditPromptEmpty"));
-    if (!selectedVersion) return toast.error(t("toastNoVersionSelected"));
+    if (!selectedImageVersion) return toast.error(t("toastNoVersionSelected"));
     await editImage({
       segmentId,
       prompt: tuningPrompt,
-      versionIdToEdit: selectedVersion._id,
+      versionIdToEdit: selectedImageVersion._id,
     });
     toast.success(t("toastImageEditStarted"));
     setTuningPrompt("");
   };
 
-  // Return values, now including videoClipUrl
+  const handleSelectVersion = async (
+    type: DisplayMode,
+    versionId: Id<"imageVersions"> | Id<"videoClipVersions">,
+  ) => {
+    if (isSelecting) return;
+    try {
+      const promise =
+        type === "image"
+          ? selectImage({
+              segmentId,
+              versionId: versionId as Id<"imageVersions">,
+            })
+          : selectVideo({
+              segmentId,
+              videoClipVersionId: versionId as Id<"videoClipVersions">,
+            });
+
+      // 关键改动：根据用户选择的类型，立即切换前端的显示模式
+      setDisplayMode(type);
+
+      await promise;
+      toast.success(t("toastVersionSelected"));
+      queryClient.invalidateQueries({
+        queryKey: convexQuery(api.segments.getSegmentEditorData, { segmentId })
+          .queryKey,
+      });
+    } catch (err) {
+      toast.error(t("toastVersionSelectFailed"));
+      console.error(err);
+    }
+  };
+
   return {
     segment,
-    versions: versions as VersionWithUrl[] | undefined,
-    selectedVersion,
+    imageVersions,
     imageUrl,
-    videoClipUrl, // EXPOSE THE VIDEO URL
+    videoClipUrl,
+    displayMode,
     promptText,
     setPromptText,
     tuningPrompt,
     setTuningPrompt,
     handleRegenerate,
     handleEditImage,
-    selectVersion,
+    handleSelectVersion,
     isProcessing,
     isSelecting,
     isEditing,
     isRegenerating,
-    isLoading: isLoading,
+    isLoading,
+    generateVideoForImage,
+    isGeneratingVideo,
+    generatingVideoVariables,
   };
 }
