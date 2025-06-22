@@ -1,18 +1,22 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "convex/react";
 import { useConvexMutation } from "@convex-dev/react-query";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { api } from "~/convex/_generated/api";
-import { Id } from "~/convex/_generated/dataModel";
+import { Id, Doc } from "~/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { useSensor, PointerSensor, DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
+import { convexQuery } from "@convex-dev/react-query";
 
-type SegmentWithImageUrl = NonNullable<
-  ReturnType<typeof useQuery<typeof api.segments.getByStory>>
->[number];
+// [FIXED] The type inference using `._implementation` was based on internal Convex
+// details and has broken in a newer version. The most robust approach is to
+// explicitly define the type based on the return shape of the
+// `api.segments.getSegmentsWithPreview` query.
+type SegmentWithImageUrl = Doc<"segments"> & {
+  previewImageUrl: string | null;
+};
 
 /**
  * Custom hook to manage all logic related to a story's segments.
@@ -22,8 +26,11 @@ type SegmentWithImageUrl = NonNullable<
 export function useStorySegments(storyId: Id<"story">) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  const segmentsData = useQuery(api.segments.getByStory, { storyId });
+  // [FIXED] Use the new, correct query.
+  const query = convexQuery(api.segments.getSegmentsWithPreview, { storyId });
+  const { data: segmentsData, isLoading } = useQuery(query);
 
   const [activeSegments, setActiveSegments] = useState<SegmentWithImageUrl[]>(
     [],
@@ -41,6 +48,8 @@ export function useStorySegments(storyId: Id<"story">) {
     },
     onSuccess: () => {
       toast.success(t("toastOrderSaved"));
+      // Invalidate query to refetch the new order from the server
+      queryClient.invalidateQueries({ queryKey: query.queryKey });
     },
     onError: (err) => {
       toast.error(t("toastOrderSaveFailed"), {
@@ -59,6 +68,8 @@ export function useStorySegments(storyId: Id<"story">) {
     },
     onSuccess: (newSegmentId) => {
       toast.success(t("toastSegmentAdded"));
+      // Invalidate the list so it shows the new segment
+      queryClient.invalidateQueries({ queryKey: query.queryKey });
       navigate({
         to: "/stories/$storyId/segments/$segmentId",
         params: { storyId, segmentId: newSegmentId },
@@ -89,8 +100,8 @@ export function useStorySegments(storyId: Id<"story">) {
   }
 
   return {
-    segmentsData,
-    activeSegments,
+    segmentsData: activeSegments, // Return the stateful list for optimistic updates
+    isLoading,
     isAdding,
     addSegment,
     handleDragEnd,

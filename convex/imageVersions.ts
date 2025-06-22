@@ -6,11 +6,10 @@ import {
   internalQuery,
 } from "./_generated/server";
 import { v } from "convex/values";
-import { auth } from "./auth";
 import { internal } from "./_generated/api";
 import { Jimp } from "jimp";
 import { imageVersionSourceValidator } from "./schema";
-import { verifySegmentOwner } from "./lib/auth"; // 1. 导入统一的授权函数
+import { verifySegmentOwner } from "./lib/auth";
 import { Id } from "./_generated/dataModel";
 
 const SCALED_IMAGE_WIDTH = 468;
@@ -19,7 +18,6 @@ const SCALED_IMAGE_HEIGHT = 850;
 export const getBySegment = query({
   args: { segmentId: v.id("segments") },
   async handler(ctx, args) {
-    // 2. 使用集中的授权逻辑，更简洁、更一致
     await verifySegmentOwner(ctx, args.segmentId);
 
     const versions = await ctx.db
@@ -28,7 +26,6 @@ export const getBySegment = query({
       .order("desc")
       .collect();
 
-    // 3. 预先生成所有图片的URL，解决前端N+1查询问题
     const versionsWithUrls = await Promise.all(
       versions.map(async (version) => {
         const previewImageUrl = version.previewImage
@@ -45,19 +42,25 @@ export const getBySegment = query({
   },
 });
 
-// 1. 新建一个可复用的内部辅助函数
+/**
+ * [FIXED] The helper function for selecting an image version.
+ * It now correctly clears any previously selected video clip, ensuring
+ * a consistent and unambiguous UI state.
+ */
 async function selectVersionHelper(
   ctx: any,
   args: { segmentId: Id<"segments">; versionId: Id<"imageVersions"> },
 ) {
-  // 核心逻辑：选择版本，并清除所有进行中或错误的状态
+  // [CRITICAL FIX] When an image is selected, any selected video must be deselected.
+  // This makes the UI logic much simpler and more predictable.
   await ctx.db.patch(args.segmentId, {
     selectedVersionId: args.versionId,
+    selectedVideoClipVersionId: undefined, // Clear the selected video
     isGenerating: false,
     error: undefined,
   });
 
-  // 检查是否需要更新故事封面
+  // Check if this is the first segment to update the story's main thumbnail.
   const segment = await ctx.db.get(args.segmentId);
   if (segment && segment.order === 0) {
     await ctx.scheduler.runAfter(
@@ -84,6 +87,7 @@ export const createAndSelectVersion = internalMutation({
       ...args,
       userIdString: args.userId,
     });
+    // When a new image is created, it should become the selected one.
     await selectVersionHelper(ctx, {
       segmentId: args.segmentId,
       versionId: versionId,
@@ -98,18 +102,11 @@ export const startUploadAndSelectVersion = mutation({
     uploadedImageId: v.id("_storage"),
   },
   async handler(ctx, args) {
-    const userId = await auth.getUserId(ctx);
-    if (!userId) throw new Error("User not authenticated.");
+    const { userId, story } = await verifySegmentOwner(ctx, args.segmentId);
+    if (!story) throw new Error("Story not found for segment.");
 
-    const segment = await ctx.db.get(args.segmentId);
-    if (!segment) throw new Error("Segment not found.");
+    await ctx.db.patch(args.segmentId, { isGenerating: true });
 
-    const story = await ctx.db.get(segment.storyId);
-    if (!story || story.userId !== userId) {
-      throw new Error("User not authorized to upload to this segment.");
-    }
-
-    // Schedule the action to do the file processing.
     await ctx.scheduler.runAfter(
       0,
       internal.imageVersions.processUploadedImage,
@@ -120,9 +117,6 @@ export const startUploadAndSelectVersion = mutation({
         storyFormat: story.format ?? "vertical",
       },
     );
-
-    // Optionally set a processing state on the segment immediately
-    await ctx.db.patch(args.segmentId, { isGenerating: true });
   },
 });
 
@@ -131,7 +125,7 @@ export const processUploadedImage = internalAction({
     userId: v.id("users"),
     segmentId: v.id("segments"),
     uploadedImageId: v.id("_storage"),
-    storyFormat: v.string(), // Pass format to avoid extra DB calls
+    storyFormat: v.string(),
   },
   handler: async (ctx, args) => {
     try {
@@ -161,16 +155,11 @@ export const processUploadedImage = internalAction({
         previewImageId: previewStorageId,
       });
     } catch (error: any) {
-      console.error(
-        `Failed to process uploaded image for segment ${args.segmentId}:`,
-        error,
-      );
+      console.error(`Failed to process uploaded image for segment ${args.segmentId}:`, error);
       await ctx.runMutation(internal.segments.updateSegmentStatus, {
         segmentId: args.segmentId,
         isGenerating: false,
-        error:
-          error.message ||
-          "Failed to process uploaded image. It might be corrupted.",
+        error: error.message || "Failed to process uploaded image.",
       });
     }
   },
@@ -187,13 +176,12 @@ export const createVersionFromUpload = internalMutation({
     const newVersionId = await ctx.db.insert("imageVersions", {
       segmentId: args.segmentId,
       userId: args.userId,
-      userIdString: args.userId, // 新增：为上传的图片添加字符串ID
+      userIdString: args.userId,
       image: args.originalImageId,
       previewImage: args.previewImageId,
       source: "user_uploaded",
     });
 
-    // 3. (关键修复) 使用新的辅助函数，它会清除错误状态
     await selectVersionHelper(ctx, {
       segmentId: args.segmentId,
       versionId: newVersionId,
@@ -207,23 +195,13 @@ export const selectVersion = mutation({
     versionId: v.id("imageVersions"),
   },
   async handler(ctx, args) {
-    const userId = await auth.getUserId(ctx);
-    if (!userId) throw new Error("User not authenticated.");
-
-    const segment = await ctx.db.get(args.segmentId);
-    if (!segment) throw new Error("Segment not found.");
-
-    const story = await ctx.db.get(segment.storyId);
-    if (!story || story.userId !== userId) {
-      throw new Error("User not authorized to modify this segment.");
-    }
+    await verifySegmentOwner(ctx, args.segmentId);
 
     const version = await ctx.db.get(args.versionId);
     if (!version || version.segmentId !== args.segmentId) {
       throw new Error("Version does not belong to this segment.");
     }
 
-    // 4. 使用新的辅助函数来统一逻辑并修复bug
     await selectVersionHelper(ctx, {
       segmentId: args.segmentId,
       versionId: args.versionId,

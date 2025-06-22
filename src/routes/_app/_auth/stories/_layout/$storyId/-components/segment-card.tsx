@@ -2,7 +2,7 @@ import { useState, useEffect, forwardRef } from "react";
 import { useConvexMutation } from "@convex-dev/react-query";
 import { useMutation as useTanstackMutation } from "@tanstack/react-query";
 import { api } from "~/convex/_generated/api";
-import { Id } from "~/convex/_generated/dataModel";
+import { Id, Doc } from "~/convex/_generated/dataModel";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/ui/button";
 import {
@@ -14,15 +14,14 @@ import {
 import { toast } from "sonner";
 import { Loader2, GripVertical, MoreHorizontal, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "convex/react";
 
-// The data structure we now expect from the `getByStory` query.
-type SegmentWithVersion = NonNullable<
-  ReturnType<typeof useQuery<typeof api.segments.getByStory>>
->[number];
+// [FIX] The type now correctly reflects the data provided by the parent component.
+type SegmentWithPreview = Doc<"segments"> & {
+  previewImageUrl: string | null;
+};
 
 interface SegmentCardProps extends React.HTMLAttributes<HTMLDivElement> {
-  segment: SegmentWithVersion;
+  segment: SegmentWithPreview;
   storyId: Id<"story">;
   dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
 }
@@ -31,6 +30,7 @@ export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
   ({ segment, storyId, dragHandleProps, ...props }, ref) => {
     const { t } = useTranslation();
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+    const deleteSegmentMutation = useConvexMutation(api.segments.deleteSegment);
 
     const { mutate: deleteSegment, isPending: isDeleting } =
       useTanstackMutation({
@@ -39,7 +39,7 @@ export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
         },
         onSuccess: () => {
           toast.success(t("toastSegmentDeleted"));
-          setIsDeleteDialogOpen(false);
+          setIsDeleteDialogOpen(false); // Close the dialog on success
         },
         onError: (error) => {
           toast.error(t("toastSegmentDeleteFailed"), {
@@ -53,7 +53,6 @@ export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
     const updateTextMutation = useConvexMutation(
       api.segments.updateSegmentText,
     );
-    const deleteSegmentMutation = useConvexMutation(api.segments.deleteSegment);
 
     const { mutate: debouncedUpdateText } = useTanstackMutation({
       mutationFn: async (newText: string) => {
@@ -78,17 +77,15 @@ export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
       return () => clearTimeout(handler);
     }, [text, segment.text, debouncedUpdateText]);
 
-    // 处理取消删除
-    const handleCancelDelete = () => {
-      setIsDeleteDialogOpen(false);
-    };
-
-    // 处理确认删除
     const handleConfirmDelete = () => {
       deleteSegment();
     };
 
-    // 处理ESC键关闭对话框
+    // [FIX] Re-added the logic to handle dialog closing manually
+    const handleCancelDelete = () => {
+      setIsDeleteDialogOpen(false);
+    };
+
     useEffect(() => {
       const handleEscape = (e: KeyboardEvent) => {
         if (e.key === "Escape" && isDeleteDialogOpen) {
@@ -102,18 +99,18 @@ export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
 
     return (
       <>
-        {/* 自定义的删除确认模态窗口 */}
+        {/* [REVERT] Reverted back to the custom dialog implementation */}
         {isDeleteDialogOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            {/* 背景遮罩 */}
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            aria-modal="true"
+            role="dialog"
+          >
             <div
               className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-all"
               onClick={handleCancelDelete}
             ></div>
-
-            {/* 模态框内容 */}
             <div className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg">
-              {/* 标题和描述 */}
               <div className="flex flex-col space-y-1.5 text-center sm:text-left">
                 <h3 className="text-lg font-semibold leading-none tracking-tight">
                   {t("confirmDeleteSegmentTitle")}
@@ -122,8 +119,6 @@ export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
                   {t("confirmDeleteSegmentDescription")}
                 </p>
               </div>
-
-              {/* 按钮组 */}
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button
                   variant="outline"

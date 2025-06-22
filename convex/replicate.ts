@@ -17,6 +17,10 @@ const openai = new OpenAI();
 const SCALED_IMAGE_WIDTH = 468;
 const SCALED_IMAGE_HEIGHT = 850;
 
+// =================================================================
+// >> Section 1: AI Prompt Engineering Helpers (Unchanged)
+// =================================================================
+
 async function getEnhancedStylePrompt(styleInstruction: string) {
   if (!styleInstruction || styleInstruction.trim() === "") {
     return "";
@@ -57,7 +61,6 @@ This fragment will be prepended to a specific scene description to ensure a cons
     return completion.choices[0]?.message?.content ?? styleInstruction;
   } catch (error) {
     console.error("Error enhancing style prompt:", error);
-    // Fallback to the original instruction if the LLM call fails
     return styleInstruction;
   }
 }
@@ -101,159 +104,18 @@ You will be given the original narrative text in <SceneText> tags and an overall
       ],
       temperature: 0.7,
     });
-    // Fallback to the original text if the LLM fails to produce a good prompt
     return completion.choices[0]?.message?.content ?? sceneText;
   } catch (error) {
     console.error("Error generating video prompt:", error);
-    // Fallback to the original text in case of an error
     return sceneText;
   }
 }
-
-export const regenerateSegmentImageUsingPrompt = internalAction({
-  args: { segmentId: v.id("segments"), prompt: v.string() },
-  handler: async (ctx, args) => {
-    try {
-      const segment = await ctx.runQuery(internal.segments.getSegmentInternal, {
-        segmentId: args.segmentId,
-      });
-      if (!segment) throw new Error("Segment not found");
-
-      const story = await ctx.runQuery(internal.story.getStoryInternal, {
-        storyId: segment.storyId,
-      });
-      if (!story) throw new Error("Story not found");
-
-      const scenePrompt = args.prompt;
-      let finalPrompt = scenePrompt;
-      // If a global style prompt exists, enhance it and then prepend it.
-      if (story.stylePrompt && story.stylePrompt.trim() !== "") {
-        const enhancedStyle = await getEnhancedStylePrompt(story.stylePrompt);
-        finalPrompt = `${enhancedStyle}, ${scenePrompt}`;
-      }
-
-      const isVertical = story.format === "vertical";
-      const width = isVertical ? 1080 : 1920;
-      const height = isVertical ? 1920 : 1080;
-
-      let output: any;
-      if (process.env.IMAGE_MODEL === "flux") {
-        output = await replicate.run("black-forest-labs/flux-schnell", {
-          input: {
-            prompt: finalPrompt,
-            num_outputs: 1,
-            disable_safety_checker: false,
-            aspect_ratio: isVertical ? "9:16" : "16:9",
-            output_format: "jpg",
-            output_quality: 90,
-          },
-        });
-      } else {
-        output = await replicate.run(
-          "stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc",
-          {
-            input: {
-              width,
-              height,
-              disable_safety_checker: false,
-              prompt: finalPrompt,
-              negative_prompt:
-                "nsfw, out of frame, lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, deformed, cross-eyed,",
-              num_inference_steps: 50,
-              prompt_strength: 0.8,
-              high_noise_frac: 0.8,
-              guidance_scale: 7.5,
-            },
-          },
-        );
-      }
-
-      const url = String(output[0]);
-      const response = await fetch(url);
-      const arrayBuffer = await response.arrayBuffer();
-
-      let image = await Jimp.read(arrayBuffer);
-
-      if (image.width < width || image.height < height) {
-        console.log(
-          `Image is smaller than target. Upscaling... Original: ${image.width}x${image.height}, Target: ${width}x${height}`,
-        );
-        const output = (await replicate.run(
-          "nightmareai/real-esrgan:f121d640bd286e1fdc67f9799164c1d5be36ff74576ee11c803ae5b665dd46aa",
-          {
-            input: {
-              image: url,
-              scale: 2, // Upscale by 2x, can be adjusted
-            },
-          },
-        )) as unknown as string;
-
-        const upscaledResponse = await fetch(output);
-        const upscaledArrayBuffer = await upscaledResponse.arrayBuffer();
-        image = await Jimp.read(upscaledArrayBuffer);
-      }
-
-      // Use `cover` with the correct object syntax to enforce standard dimensions.
-      image.cover({ w: width, h: height });
-
-      const originalImageBuffer = await image.getBuffer("image/jpeg");
-      const storageId: Id<"_storage"> = await ctx.storage.store(
-        new Blob([originalImageBuffer], { type: "image/jpeg" }),
-      );
-
-      const previewImage = image.clone().scaleToFit({
-        w: isVertical ? SCALED_IMAGE_WIDTH : SCALED_IMAGE_HEIGHT,
-        h: isVertical ? SCALED_IMAGE_HEIGHT : SCALED_IMAGE_WIDTH,
-      });
-      const previewImageBuffer = await previewImage.getBuffer("image/jpeg");
-
-      const previewStorageId: Id<"_storage"> = await ctx.storage.store(
-        new Blob([previewImageBuffer], { type: "image/jpeg" }),
-      );
-
-      const newImageVersionId = await ctx.runMutation(
-        internal.imageVersions.createAndSelectVersion,
-        {
-          segmentId: args.segmentId,
-          userId: story.userId,
-          prompt: finalPrompt,
-          image: storageId,
-          previewImage: previewStorageId,
-          source: "ai_generated",
-        },
-      );
-
-      await ctx.scheduler.runAfter(
-        0,
-        internal.media.generateEmbeddingForImage,
-        {
-          imageVersionId: newImageVersionId,
-        },
-      );
-      
-      // On success, explicitly return true.
-      return true;
-    } catch (err) {
-      const error = err as Error;
-      console.error(error.message);
-      await ctx.runMutation(internal.segments.updateSegmentStatus, {
-        segmentId: args.segmentId,
-        isGenerating: false,
-        error: error.message,
-      });
-
-      // On failure, explicitly return false.
-      return false;
-    }
-  },
-});
 
 async function getEditingPrompt(
   originalPrompt: string | undefined,
   newInstruction: string,
   styleGuide: string | undefined,
 ) {
-  // If there's no original prompt, the task is simpler. No need for a complex merge.
   if (!originalPrompt) {
     if (styleGuide && styleGuide.trim() !== "") {
       return `${styleGuide}, ${newInstruction}`;
@@ -308,11 +170,9 @@ ${newInstruction}
       ],
       temperature: 0.5,
     });
-    // Use optional chaining and nullish coalescing for safety
     return completion.choices[0]?.message?.content ?? newInstruction;
   } catch (error) {
     console.error("Error generating editing prompt:", error);
-    // Fallback to a simple concatenation if the LLM fails. This is not perfect but better than nothing.
     const fallback = `${newInstruction}, ${originalPrompt}`;
     if (styleGuide) {
       return `${styleGuide}, ${fallback}`;
@@ -320,6 +180,128 @@ ${newInstruction}
     return fallback;
   }
 }
+
+// =================================================================
+// >> Section 2: Image Generation Actions (Largely Unchanged)
+// =================================================================
+
+export const regenerateSegmentImageUsingPrompt = internalAction({
+  args: { segmentId: v.id("segments"), prompt: v.string() },
+  handler: async (ctx, args) => {
+    try {
+      const segment = await ctx.runQuery(internal.segments.getSegmentInternal, {
+        segmentId: args.segmentId,
+      });
+      if (!segment) throw new Error("Segment not found");
+
+      const story = await ctx.runQuery(internal.story.getStoryInternal, {
+        storyId: segment.storyId,
+      });
+      if (!story) throw new Error("Story not found");
+
+      const scenePrompt = args.prompt;
+      let finalPrompt = scenePrompt;
+      if (story.stylePrompt && story.stylePrompt.trim() !== "") {
+        const enhancedStyle = await getEnhancedStylePrompt(story.stylePrompt);
+        finalPrompt = `${enhancedStyle}, ${scenePrompt}`;
+      }
+
+      const isVertical = story.format === "vertical";
+      const width = isVertical ? 1080 : 1920;
+      const height = isVertical ? 1920 : 1080;
+
+      let output: any;
+      if (process.env.IMAGE_MODEL === "flux") {
+        output = await replicate.run("black-forest-labs/flux-schnell", {
+          input: {
+            prompt: finalPrompt,
+            num_outputs: 1,
+            disable_safety_checker: false,
+            aspect_ratio: isVertical ? "9:16" : "16:9",
+            output_format: "jpg",
+            output_quality: 90,
+          },
+        });
+      } else {
+        output = await replicate.run(
+          "stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc",
+          {
+            input: {
+              width,
+              height,
+              disable_safety_checker: false,
+              prompt: finalPrompt,
+              negative_prompt:
+                "nsfw, out of frame, lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, deformed, cross-eyed,",
+              num_inference_steps: 50,
+              prompt_strength: 0.8,
+              high_noise_frac: 0.8,
+              guidance_scale: 7.5,
+            },
+          },
+        );
+      }
+
+      const url = String(output[0]);
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      let image = await Jimp.read(arrayBuffer);
+
+      if (image.width < width || image.height < height) {
+        console.log(`Upscaling...`);
+        const output = (await replicate.run(
+          "nightmareai/real-esrgan:f121d640bd286e1fdc67f9799164c1d5be36ff74576ee11c803ae5b665dd46aa",
+          { input: { image: url, scale: 2 } },
+        )) as unknown as string;
+        const upscaledResponse = await fetch(output);
+        const upscaledArrayBuffer = await upscaledResponse.arrayBuffer();
+        image = await Jimp.read(upscaledArrayBuffer);
+      }
+
+      image.cover({ w: width, h: height });
+      const originalImageBuffer = await image.getBuffer("image/jpeg");
+      const storageId: Id<"_storage"> = await ctx.storage.store(
+        new Blob([originalImageBuffer], { type: "image/jpeg" }),
+      );
+
+      const previewImage = image.clone().scaleToFit({
+        w: isVertical ? SCALED_IMAGE_WIDTH : SCALED_IMAGE_HEIGHT,
+        h: isVertical ? SCALED_IMAGE_HEIGHT : SCALED_IMAGE_WIDTH,
+      });
+      const previewImageBuffer = await previewImage.getBuffer("image/jpeg");
+      const previewStorageId: Id<"_storage"> = await ctx.storage.store(
+        new Blob([previewImageBuffer], { type: "image/jpeg" }),
+      );
+
+      const newImageVersionId = await ctx.runMutation(
+        internal.imageVersions.createAndSelectVersion,
+        {
+          segmentId: args.segmentId,
+          userId: story.userId,
+          prompt: finalPrompt,
+          image: storageId,
+          previewImage: previewStorageId,
+          source: "ai_generated",
+        },
+      );
+
+      await ctx.scheduler.runAfter(0, internal.media.generateEmbeddingForImage, {
+        imageVersionId: newImageVersionId,
+      });
+
+      return true;
+    } catch (err) {
+      const error = err as Error;
+      console.error(error.message);
+      await ctx.runMutation(internal.segments.updateSegmentStatus, {
+        segmentId: args.segmentId,
+        isGenerating: false,
+        error: error.message,
+      });
+      return false;
+    }
+  },
+});
 
 export const editSegmentImageUsingPrompt = internalAction({
   args: {
@@ -349,7 +331,6 @@ export const editSegmentImageUsingPrompt = internalAction({
       });
       if (!story) throw new Error("Story not found");
 
-      // Enhance the story's style prompt before using it.
       const enhancedStyle = story.stylePrompt
         ? await getEnhancedStylePrompt(story.stylePrompt)
         : undefined;
@@ -357,7 +338,7 @@ export const editSegmentImageUsingPrompt = internalAction({
       const finalPrompt = await getEditingPrompt(
         args.originalPrompt,
         args.newInstruction,
-        enhancedStyle, // Pass the enhanced style guide
+        enhancedStyle,
       );
 
       const output: any = await replicate.run(
@@ -375,37 +356,24 @@ export const editSegmentImageUsingPrompt = internalAction({
       const newImageUrl = String(output);
       const response = await fetch(newImageUrl);
       const arrayBuffer = await response.arrayBuffer();
-
       let image = await Jimp.read(arrayBuffer);
 
-      // Enforce standard dimensions to ensure consistency across all image versions.
       const isVertical = story.format === "vertical";
       const width = isVertical ? 1080 : 1920;
       const height = isVertical ? 1920 : 1080;
 
-      // Upscale if the image is smaller than the target dimensions to avoid quality loss.
       if (image.width < width || image.height < height) {
-        console.log(
-          `Image is smaller than target. Upscaling... Original: ${image.width}x${image.height}, Target: ${width}x${height}`,
-        );
+        console.log(`Upscaling...`);
         const output = (await replicate.run(
           "nightmareai/real-esrgan:f121d640bd286e1fdc67f9799164c1d5be36ff74576ee11c803ae5b665dd46aa",
-          {
-            input: {
-              image: newImageUrl,
-              scale: 2,
-            },
-          },
+          { input: { image: newImageUrl, scale: 2 } },
         )) as unknown as string;
-
         const upscaledResponse = await fetch(output);
         const upscaledArrayBuffer = await upscaledResponse.arrayBuffer();
         image = await Jimp.read(upscaledArrayBuffer);
       }
 
-      // Use `cover` with the correct object syntax to enforce standard dimensions.
       image.cover({ w: width, h: height });
-
       const originalImageBuffer = await image.getBuffer("image/jpeg");
       const storageId: Id<"_storage"> = await ctx.storage.store(
         new Blob([originalImageBuffer], { type: "image/jpeg" }),
@@ -416,7 +384,6 @@ export const editSegmentImageUsingPrompt = internalAction({
         h: isVertical ? SCALED_IMAGE_HEIGHT : SCALED_IMAGE_WIDTH,
       });
       const previewImageBuffer = await previewImage.getBuffer("image/jpeg");
-
       const previewStorageId: Id<"_storage"> = await ctx.storage.store(
         new Blob([previewImageBuffer], { type: "image/jpeg" }),
       );
@@ -433,13 +400,9 @@ export const editSegmentImageUsingPrompt = internalAction({
         },
       );
 
-      await ctx.scheduler.runAfter(
-        0,
-        internal.media.generateEmbeddingForImage,
-        {
-          imageVersionId: newImageVersionId,
-        },
-      );
+      await ctx.scheduler.runAfter(0, internal.media.generateEmbeddingForImage, {
+        imageVersionId: newImageVersionId,
+      });
     } catch (err) {
       const error = err as Error;
       console.error(error.message);
@@ -452,90 +415,174 @@ export const editSegmentImageUsingPrompt = internalAction({
   },
 });
 
-export const generateVideoClip = internalAction({
+// =================================================================
+// >> Section 3: Video Generation Actions (NEW & REFACTORED)
+// =================================================================
+
+/**
+ * [NEW] Handles the "image-to-video" generation process.
+ * It's called by the `generateImageToVideo` mutation in `segments.ts`.
+ */
+export const generateImageToVideoClip = internalAction({
   args: {
     segmentId: v.id("segments"),
+    userId: v.id("users"),
     imageVersionId: v.id("imageVersions"),
-    videoVersionId: v.optional(v.id("videoVersions")),
+    // This is passed for full story video generation
+    generationId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     let videoClipVersionId: Id<"videoClipVersions"> | null = null;
-
     try {
-      // 步骤 1: 调用位于 segments.ts 中的 query 来安全地获取数据
+      // Step 1: Get all necessary data using our new, clean query.
       const data = await ctx.runQuery(
-        internal.segments.getVideoClipGenerationData,
+        internal.segments.getImageToVideoGenerationData,
         {
           segmentId: args.segmentId,
           imageVersionId: args.imageVersionId,
         },
       );
 
-      if (!data.imageVersion.image) {
-        throw new Error("Source image version does not have a stored image.");
-      }
-      const startImageUrl = await ctx.storage.getUrl(data.imageVersion.image);
-      if (!startImageUrl) {
-        throw new Error("Could not get URL for start image.");
-      }
-
-      // 步骤 2: 生成视频 prompt
+      // Step 2: Engineer a high-quality prompt for the video model.
       const videoPrompt = await generateVideoPrompt(
         data.segmentText,
         data.storyStyle,
       );
 
-      // 步骤 3: 创建一个 videoClipVersion 记录，初始状态为 "generating"
+      // Step 3: [CRITICAL] Create the video clip record using the new schema-compliant function.
       videoClipVersionId = await ctx.runMutation(
         internal.segments.createVideoClipVersion,
         {
-          type: "image-to-video",
           segmentId: args.segmentId,
-          userId: data.userId,
-          sourceImageVersionId: args.imageVersionId,
-          videoVersionId: args.videoVersionId, // 如果是批量任务，这里会有值
-          generationStatus: "generating",
-          prompt: videoPrompt,
+          userId: args.userId,
+          generationId: args.generationId,
+          // Construct the `context` object that matches our schema.
+          context: {
+            type: "image_to_video",
+            sourceImageId: args.imageVersionId,
+            prompt: videoPrompt,
+          },
         },
       );
 
-      // 步骤 4: 调用 Replicate API
-      const input = {
-        prompt: videoPrompt,
-        start_image: startImageUrl,
-        mode: "standard",
-        duration: 5,
-        negative_prompt:
-          "low quality, bad quality, blurry, pixelated, cgi, fake, unreal, cartoon, drawing, illustration, watermark",
-      };
-      const output = await replicate.run("kwaivgi/kling-v2.1", { input });
+      // Step 4: Call the Replicate API to generate the video.
+      const output = await replicate.run("kwaivgi/kling-v2.1", {
+        input: {
+          prompt: videoPrompt,
+          start_image: data.imageUrl,
+          mode: "standard",
+          duration: 5,
+          negative_prompt: "low quality, bad quality, blurry, cgi, fake",
+        },
+      });
 
-      // ... [校验 output, fetch 视频, 存入 storage 的逻辑保持不变] ...
-      const outputUrl = String(output);
-      if (!outputUrl || typeof outputUrl !== "string") {
-        throw new Error(
-          `Replicate did not return a valid URL string. Got: ${outputUrl}`,
-        );
-      }
-      const videoResponse = await fetch(outputUrl);
-      if (!videoResponse.ok) {
-        throw new Error(
-          `Failed to fetch video from Replicate URL: ${videoResponse.statusText}`,
-        );
-      }
+      // Step 5: Fetch the generated video and store it in Convex storage.
+      const videoUrl = String(output);
+      if (!videoUrl) throw new Error("Replicate did not return a video URL.");
+      const videoResponse = await fetch(videoUrl);
+      if (!videoResponse.ok)
+        throw new Error("Failed to fetch video from Replicate.");
       const videoBuffer = await videoResponse.arrayBuffer();
-      const videoStorageId = await ctx.storage.store(
-        new Blob([videoBuffer], { type: "video/mp4" }),
-      );
+      const videoStorageId = await ctx.storage.store(new Blob([videoBuffer]));
 
-      // 步骤 5: 更新记录为 "generated"
+      // Step 6: Update the video clip record with the new storage ID and set status to "generated".
       await ctx.runMutation(internal.segments.updateVideoClipVersion, {
         videoClipVersionId,
         storageId: videoStorageId,
         generationStatus: "generated",
       });
 
-      // 步骤 6: 将新生成的视频设置为场景的当前选中版本
+      // Step 7: Link the newly generated and stored video as the selected one for the segment.
+      await ctx.runMutation(internal.segments.internalLinkVideoToSegment, {
+        segmentId: args.segmentId,
+        videoClipVersionId: videoClipVersionId,
+      });
+
+      // Step 8: Schedule embedding generation for the media library.
+      await ctx.scheduler.runAfter(
+        0,
+        internal.media.generateEmbeddingForVideo,
+        {
+          videoClipVersionId: videoClipVersionId,
+        },
+      );
+
+      return { success: true };
+    } catch (error: any) {
+      console.error(
+        `Image-to-video generation failed for segment ${args.segmentId}:`,
+        error,
+      );
+      if (videoClipVersionId) {
+        await ctx.runMutation(internal.segments.updateVideoClipVersion, {
+          videoClipVersionId,
+          generationStatus: "error",
+          statusMessage: error.message,
+        });
+      }
+      // Also update the segment's main status to unblock UI
+      await ctx.runMutation(internal.segments.updateSegmentStatus, {
+        segmentId: args.segmentId,
+        isGenerating: false,
+        error: error.message,
+      });
+      return { success: false, error: error.message };
+    }
+  },
+});
+
+/**
+ * [NEW] Handles the "text-to-video" generation process.
+ * It's called by the `generateTextToVideo` mutation in `segments.ts`.
+ */
+export const generateTextToVideoClip = internalAction({
+  args: {
+    segmentId: v.id("segments"),
+    userId: v.id("users"),
+    prompt: v.string(),
+  },
+  handler: async (ctx, args) => {
+    let videoClipVersionId: Id<"videoClipVersions"> | null = null;
+    try {
+      // Step 1: [CRITICAL] Create the video clip record using the schema-compliant function.
+      videoClipVersionId = await ctx.runMutation(
+        internal.segments.createVideoClipVersion,
+        {
+          segmentId: args.segmentId,
+          userId: args.userId,
+          // Construct the `context` object for text-to-video.
+          context: {
+            type: "text_to_video",
+            prompt: args.prompt,
+          },
+        },
+      );
+
+      // Step 2: Call the Replicate API. Note: No start_image is provided.
+      const output = await replicate.run("kwaivgi/kling-v2.1", {
+        input: {
+          prompt: args.prompt,
+          mode: "standard",
+          duration: 5,
+          negative_prompt: "low quality, bad quality, blurry, cgi, fake",
+        },
+      });
+
+      // Step 3: Fetch, store, and update the record (same as image-to-video).
+      const videoUrl = String(output);
+      if (!videoUrl) throw new Error("Replicate did not return a video URL.");
+      const videoResponse = await fetch(videoUrl);
+      if (!videoResponse.ok)
+        throw new Error("Failed to fetch video from Replicate.");
+      const videoBuffer = await videoResponse.arrayBuffer();
+      const videoStorageId = await ctx.storage.store(new Blob([videoBuffer]));
+
+      await ctx.runMutation(internal.segments.updateVideoClipVersion, {
+        videoClipVersionId,
+        storageId: videoStorageId,
+        generationStatus: "generated",
+      });
+
       await ctx.runMutation(internal.segments.internalLinkVideoToSegment, {
         segmentId: args.segmentId,
         videoClipVersionId: videoClipVersionId,
@@ -551,22 +598,24 @@ export const generateVideoClip = internalAction({
 
       return { success: true };
     } catch (error: any) {
-      const errorMessage =
-        error.message || "Unknown error during video clip generation.";
       console.error(
-        `Failed to generate video clip for segment ${args.segmentId}:`,
+        `Text-to-video generation failed for segment ${args.segmentId}:`,
         error,
       );
-
-      // 步骤 7 (Catch): 如果出错，也要更新记录状态
       if (videoClipVersionId) {
         await ctx.runMutation(internal.segments.updateVideoClipVersion, {
           videoClipVersionId,
           generationStatus: "error",
-          statusMessage: errorMessage,
+          statusMessage: error.message,
         });
       }
-      return { success: false, error: errorMessage };
+      // Also update the segment's main status to unblock UI
+      await ctx.runMutation(internal.segments.updateSegmentStatus, {
+        segmentId: args.segmentId,
+        isGenerating: false,
+        error: error.message,
+      });
+      return { success: false, error: error.message };
     }
   },
 });

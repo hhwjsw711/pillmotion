@@ -7,12 +7,22 @@ import { SearchResult } from "@/hooks/useMediaLibrary";
 import { Button } from "@/ui/button";
 import { useState } from "react";
 import { cn } from "@/utils/misc";
+import { useTranslation } from "react-i18next";
+
+// Helper function to extract prompt regardless of type
+const getPrompt = (result: SearchResult): string | undefined => {
+  if (result.resultType === "image") {
+    return result.prompt;
+  }
+  return result.context.prompt;
+};
 
 interface MediaLibraryModalProps {
   onSelect?: (result: SearchResult) => void;
 }
 
 export const MediaLibraryModal = ({ onSelect }: MediaLibraryModalProps) => {
+  const { t } = useTranslation();
   const { isOpen, close: closeStore } = useMediaLibraryStore();
   const { searchTerm, setSearchTerm, results, isLoading, error } =
     useMediaLibrary();
@@ -36,11 +46,11 @@ export const MediaLibraryModal = ({ onSelect }: MediaLibraryModalProps) => {
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0">
         <DialogHeader className="p-4 border-b">
-          <DialogTitle>Media Library</DialogTitle>
+          <DialogTitle>{t("mediaLibraryTitle")}</DialogTitle>
         </DialogHeader>
         <div className="relative p-4 border-b">
           <Input
-            placeholder="Search all your generated images and videos..."
+            placeholder={t("mediaLibrarySearchPlaceholder")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="text-lg pr-10"
@@ -95,6 +105,8 @@ const Content = ({
   selectedResult,
   onSelect,
 }: ContentProps) => {
+  const { t } = useTranslation();
+
   if (isLoading && results.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -126,7 +138,7 @@ const Content = ({
   if (searchTerm) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
-        <p>No results found for "{searchTerm}".</p>
+        <p>{t("mediaLibraryNoResults", { searchTerm })}</p>
       </div>
     );
   }
@@ -134,10 +146,8 @@ const Content = ({
   return (
     <div className="flex items-center justify-center h-full text-center text-muted-foreground">
       <div>
-        <p className="font-semibold">Your media library is ready.</p>
-        <p className="text-sm">
-          Recently generated items will appear here. Start typing to search.
-        </p>
+        <p className="font-semibold">{t("mediaLibraryReadyTitle")}</p>
+        <p className="text-sm">{t("mediaLibraryReadyDescription")}</p>
       </div>
     </div>
   );
@@ -177,7 +187,9 @@ const SearchResultCard = ({
   isSelected,
   onSelect,
 }: SearchResultCardProps) => {
+  const { t } = useTranslation();
   const isVideo = result.resultType === "video";
+  const prompt = getPrompt(result);
 
   return (
     <Button
@@ -191,7 +203,7 @@ const SearchResultCard = ({
       {result.previewUrl ? (
         <img
           src={result.previewUrl}
-          alt={result.prompt || "Media asset"}
+          alt={prompt || t("mediaLibraryAssetAlt")}
           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
         />
       ) : (
@@ -208,7 +220,7 @@ const SearchResultCard = ({
 
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end h-1/2 pointer-events-none">
         <p className="text-xs line-clamp-2 text-left">
-          {result.prompt || "Untitled"}
+          {prompt || t("mediaLibraryUntitled")}
         </p>
       </div>
     </Button>
@@ -224,10 +236,19 @@ const DetailView = ({
   onClose: () => void;
   onConfirm: (result: SearchResult) => void;
 }) => {
+  const { t } = useTranslation();
+  const prompt = getPrompt(result);
+  const typeText =
+    result.resultType === "image"
+      ? t("mediaLibraryAssetTypeImage")
+      : t("mediaLibraryAssetTypeVideo");
+
   return (
     <>
       <div className="p-4 border-b flex items-center justify-between">
-        <h3 className="font-semibold text-lg">Preview</h3>
+        <h3 className="font-semibold text-lg">
+          {t("mediaLibraryPreviewTitle")}
+        </h3>
         <Button variant="ghost" size="icon" onClick={onClose}>
           <X className="h-4 w-4" />
         </Button>
@@ -244,21 +265,21 @@ const DetailView = ({
           ) : (
             <img
               src={result.previewUrl!}
-              alt={result.prompt || "Untitled"}
+              alt={prompt || t("mediaLibraryUntitled")}
               className="w-full h-full object-contain rounded-lg"
             />
           )}
         </div>
         <div className="space-y-2">
-          <h4 className="font-semibold">Prompt</h4>
+          <h4 className="font-semibold">{t("promptLabel")}</h4>
           <p className="text-sm text-muted-foreground">
-            {result.prompt || "No prompt provided."}
+            {prompt || t("mediaLibraryNoPrompt")}
           </p>
         </div>
       </div>
       <div className="p-4 border-t">
         <Button className="w-full" onClick={() => onConfirm(result)}>
-          Use this {result.resultType}
+          {t("mediaLibraryUseThis", { type: typeText })}
         </Button>
       </div>
     </>

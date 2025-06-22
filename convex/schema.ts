@@ -89,6 +89,7 @@ export const IMAGE_VERSION_SOURCES = [
   "ai_generated",
   "user_uploaded",
   "ai_edited",
+  "from_library",
 ] as const;
 export const imageVersionSourceValidator = v.union(
   ...IMAGE_VERSION_SOURCES.map((s) => v.literal(s)),
@@ -127,15 +128,37 @@ export const videoProcessingStatusValidator = v.union(
 export const videoVersionSourceValidator = v.union(
   v.literal("ai_generated"),
   v.literal("user_uploaded"),
+  v.literal("ai_edited"),
+  v.literal("from_library"),
 );
 export type VideoVersionSource = Infer<typeof videoVersionSourceValidator>;
 
-export const videoClipTypeValidator = v.union(
-  v.literal("image-to-video"),
-  v.literal("text-to-video"),
-  v.literal("transition"),
+export const videoClipContextValidator = v.union(
+  // 类型一：文生视频的上下文
+  v.object({
+    type: v.literal("text_to_video"),
+    prompt: v.string(),
+  }),
+  // 类型二：图生视频的上下文
+  v.object({
+    type: v.literal("image_to_video"),
+    sourceImageId: v.id("imageVersions"),
+    prompt: v.optional(v.string()), // prompt在这里是可选的
+  }),
+  // 类型三：首尾帧视频（转场）的上下文
+  v.object({
+    type: v.literal("transition"),
+    startImageId: v.id("imageVersions"),
+    endImageId: v.id("imageVersions"),
+    prompt: v.optional(v.string()), // 转场效果的文字描述
+  }),
+  // 类型四：视频转绘（为未来预留）
+  v.object({
+    type: v.literal("video_to_video"),
+    sourceVideoClipId: v.id("videoClipVersions"),
+    prompt: v.string(), // 转绘的指令是必需的
+  }),
 );
-export type VideoClipType = Infer<typeof videoClipTypeValidator>;
 
 const schema = defineSchema({
   ...authTables,
@@ -242,24 +265,18 @@ const schema = defineSchema({
     statusMessage: v.optional(v.string()),
   }).index("by_story", ["storyId"]),
   videoClipVersions: defineTable({
-    videoVersionId: v.optional(v.id("videoVersions")),
     segmentId: v.id("segments"),
     userId: v.id("users"),
     userIdString: v.string(),
-    type: videoClipTypeValidator,
-    sourceImageVersionId: v.optional(v.id("imageVersions")), // Start frame
-    endImageVersionId: v.optional(v.id("imageVersions")), // End frame (for transitions)
+    context: videoClipContextValidator,
     storageId: v.optional(v.id("_storage")),
-    source: videoVersionSourceValidator,
-    prompt: v.optional(v.string()),
-    generationStatus: videoClipGenerationStatusValidator, // Use the new validator
+    generationStatus: videoClipGenerationStatusValidator,
     processingStatus: v.optional(videoProcessingStatusValidator),
-    generationId: v.optional(v.string()),
     statusMessage: v.optional(v.string()),
     embedding: v.optional(v.array(v.float64())),
+    generationId: v.optional(v.string()),
   })
     .index("by_segment", ["segmentId"])
-    .index("by_videoVersion", ["videoVersionId"])
     .index("by_user", ["userId"])
     .index("by_user_string", ["userIdString"])
     .vectorIndex("by_embedding", {

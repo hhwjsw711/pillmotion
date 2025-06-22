@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { SegmentCard } from "./-components/segment-card";
-import { useQuery } from "convex/react";
 import { useConvexMutation } from "@convex-dev/react-query";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "~/convex/_generated/api";
@@ -44,9 +43,10 @@ export const Route = createFileRoute("/_app/_auth/stories/_layout/$storyId/")({
   component: Story,
 });
 
-type SegmentWithImageUrl = NonNullable<
-  ReturnType<typeof useQuery<typeof api.segments.getByStory>>
->[number];
+// [REFACTORED] The type is now correctly inferred from the hook's return value
+type SegmentWithImageUrl = ReturnType<
+  typeof useStorySegments
+>["segmentsData"][number];
 
 export default function Story() {
   const { storyId } = Route.useParams();
@@ -275,9 +275,10 @@ function StorySegments({
   const { _id: storyId } = story;
   const { t } = useTranslation();
 
+  // [REFACTORED] 1. Destructure `isLoading` and remove `activeSegments`
   const {
     segmentsData,
-    activeSegments,
+    isLoading,
     isAdding,
     addSegment,
     handleDragEnd,
@@ -286,7 +287,8 @@ function StorySegments({
 
   const sensors = useSensors(pointerSensor);
 
-  if (segmentsData === undefined) {
+  // [REFACTORED] 2. Use `isLoading` for a more reliable loading state
+  if (isLoading) {
     return (
       <div className="grid grid-cols-1 gap-y-4 md:grid-cols-2 md:gap-x-8 lg:grid-cols-3">
         {[...Array(6)].map((_, i) => (
@@ -321,7 +323,8 @@ function StorySegments({
       onDragEnd={handleDragEnd}
     >
       <SortableContext
-        items={activeSegments?.map((s) => s._id) ?? []}
+        // [REFACTORED] 3. Use `segmentsData` for the list items
+        items={segmentsData.map((s) => s._id)}
         strategy={rectSortingStrategy}
       >
         <div className="space-y-4">
@@ -344,7 +347,7 @@ function StorySegments({
             </Button>
           </div>
           <div className="grid grid-cols-1 gap-y-8 md:grid-cols-2 md:gap-x-8 lg:grid-cols-3">
-            {activeSegments?.map((segment) => (
+            {segmentsData.map((segment) => (
               <SortableSegmentItem
                 key={segment._id}
                 segment={segment}

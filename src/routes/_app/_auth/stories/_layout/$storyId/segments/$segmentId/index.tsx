@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   ChevronDown,
   Video,
+  Clapperboard,
 } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
@@ -17,15 +18,14 @@ import { Textarea } from "@/ui/textarea";
 import { cn } from "@/utils/misc";
 import { ImageUploader } from "../../-components/image-uploader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
-import { ImageVersionSource } from "~/convex/schema";
 import { useTranslation } from "react-i18next";
 import {
   useSegmentEditor,
   ImageVersionWithSubVersions,
-  DisplayMode,
 } from "@/hooks/useSegmentEditor";
 import { Spinner } from "@/ui/spinner";
 import { useState } from "react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute(
   "/_app/_auth/stories/_layout/$storyId/segments/$segmentId/",
@@ -39,21 +39,22 @@ function ImageVersionCard({
   onSelect,
   isSelecting,
   onGenerateVideo,
-  isGeneratingVideo,
+  isGeneratingThisVideo,
 }: {
   version: ImageVersionWithSubVersions;
   isSelected: boolean;
   onSelect: () => void;
   isSelecting: boolean;
   onGenerateVideo: () => void;
-  isGeneratingVideo: boolean;
+  isGeneratingThisVideo: boolean;
 }) {
   const { t } = useTranslation();
 
-  const sourceDisplayName: Record<ImageVersionSource, string> = {
+  const sourceDisplayName: Record<Doc<"imageVersions">["source"], string> = {
     ai_generated: t("sourceAIGenerated"),
     ai_edited: t("sourceAIEdited"),
     user_uploaded: t("sourceUserUploaded"),
+    from_library: t("sourceFromLibrary"),
   };
 
   return (
@@ -63,13 +64,15 @@ function ImageVersionCard({
         isSelected && "ring-2 ring-primary",
       )}
     >
-      <div className="aspect-video w-full rounded bg-muted">
-        {version.previewImageUrl && (
+      <div className="aspect-video w-full rounded bg-muted flex items-center justify-center">
+        {version.previewImageUrl ? (
           <img
             src={version.previewImageUrl}
             className="h-full w-full object-contain rounded"
             alt={version.prompt ?? "User uploaded image"}
           />
+        ) : (
+          <Clapperboard className="h-10 w-10 text-muted-foreground" />
         )}
       </div>
       {version.prompt && (
@@ -104,9 +107,13 @@ function ImageVersionCard({
           size="sm"
           className="w-full"
           onClick={onGenerateVideo}
-          disabled={isGeneratingVideo}
+          disabled={isGeneratingThisVideo}
         >
-          {isGeneratingVideo ? <Spinner /> : <Video className="mr-2 h-4 w-4" />}
+          {isGeneratingThisVideo ? (
+            <Spinner />
+          ) : (
+            <Video className="mr-2 h-4 w-4" />
+          )}
           {t("buttonGenerateVideoClip")}
         </Button>
       </div>
@@ -120,7 +127,7 @@ function VideoClipCard({
   onSelect,
   isSelecting,
 }: {
-  clip: Doc<"videoClipVersions">;
+  clip: Doc<"videoClipVersions"> & { videoUrl: string | null };
   isSelected: boolean;
   onSelect: () => void;
   isSelecting: boolean;
@@ -171,21 +178,20 @@ function ImageVersionNode({
   version,
   isImageSelected,
   selectedVideoClipId,
-  onSelectVersion,
+  onSelectImage,
+  onSelectVideo,
   isSelecting,
   onGenerateVideo,
-  isGeneratingVideo,
+  isGeneratingThisVideo,
 }: {
   version: ImageVersionWithSubVersions;
   isImageSelected: boolean;
   selectedVideoClipId?: Id<"videoClipVersions">;
-  onSelectVersion: (
-    type: DisplayMode,
-    id: Id<"imageVersions"> | Id<"videoClipVersions">,
-  ) => void;
+  onSelectImage: (id: Id<"imageVersions">) => void;
+  onSelectVideo: (id: Id<"videoClipVersions">) => void;
   isSelecting: boolean;
   onGenerateVideo: (imageVersionId: Id<"imageVersions">) => void;
-  isGeneratingVideo: boolean;
+  isGeneratingThisVideo: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
   const { t } = useTranslation();
@@ -195,10 +201,10 @@ function ImageVersionNode({
       <ImageVersionCard
         version={version}
         isSelected={isImageSelected}
-        onSelect={() => onSelectVersion("image", version._id)}
+        onSelect={() => onSelectImage(version._id)}
         isSelecting={isSelecting}
         onGenerateVideo={() => onGenerateVideo(version._id)}
-        isGeneratingVideo={isGeneratingVideo}
+        isGeneratingThisVideo={isGeneratingThisVideo}
       />
       {version.videoSubVersions.length > 0 && (
         <div className="pl-2 pr-1 space-y-2">
@@ -225,7 +231,7 @@ function ImageVersionNode({
                   key={clip._id}
                   clip={clip}
                   isSelected={clip._id === selectedVideoClipId}
-                  onSelect={() => onSelectVersion("video", clip._id)}
+                  onSelect={() => onSelectVideo(clip._id)}
                   isSelecting={isSelecting}
                 />
               ))}
@@ -242,26 +248,25 @@ export default function SegmentEditor() {
   const { t } = useTranslation();
   const {
     segment,
-    imageVersions,
-    imageUrl,
-    videoClipUrl,
-    displayMode,
+    imageVersionsWithSubVersions,
+    selectedImageVersion,
+    selectedVideoClipVersion,
+    isLoading,
+    isGenerating,
+    isSelecting,
     promptText,
     setPromptText,
     tuningPrompt,
     setTuningPrompt,
-    handleRegenerate,
-    handleEditImage,
-    handleSelectVersion,
-    isProcessing,
-    isSelecting,
-    isEditing,
-    isRegenerating,
-    isLoading,
-    generateVideoForImage,
-    isGeneratingVideo,
-    generatingVideoVariables,
+    regenerateImageMutation,
+    editImageMutation,
+    selectImageMutation,
+    selectVideoMutation,
+    generateImageToVideoMutation,
+    generateTextToVideoMutation,
   } = useSegmentEditor(segmentId as Id<"segments">);
+
+  const [textToVideoPrompt, setTextToVideoPrompt] = useState("");
 
   if (isLoading) {
     return (
@@ -272,13 +277,63 @@ export default function SegmentEditor() {
   }
 
   if (!segment) {
-    // Note: The hook could also handle redirection in the future
     return <div>{t("segmentNotFound")}</div>;
   }
 
-  const selectedImageVersion = imageVersions?.find(
-    (v) => v._id === segment.selectedVersionId,
-  );
+  // Event handlers now live in the component
+  const handleRegenerate = () => {
+    if (!promptText.trim()) return toast.error(t("toastPromptEmpty"));
+    regenerateImageMutation.mutate({
+      segmentId: segment._id,
+      prompt: promptText,
+    });
+  };
+
+  const handleEditImage = () => {
+    if (!tuningPrompt.trim()) return toast.error(t("toastEditPromptEmpty"));
+    if (!selectedImageVersion) return toast.error(t("toastNoVersionSelected"));
+    editImageMutation.mutate({
+      segmentId: segment._id,
+      prompt: tuningPrompt,
+      versionIdToEdit: selectedImageVersion._id,
+    });
+  };
+
+  const handleSelectImageVersion = (versionId: Id<"imageVersions">) => {
+    if (isSelecting) return;
+    selectImageMutation.mutate({ segmentId: segment._id, versionId });
+  };
+
+  const handleSelectVideoClipVersion = (versionId: Id<"videoClipVersions">) => {
+    if (isSelecting) return;
+    selectVideoMutation.mutate({
+      segmentId: segment._id,
+      videoClipVersionId: versionId,
+    });
+  };
+
+  const handleGenerateImageToVideo = (imageVersionId: Id<"imageVersions">) => {
+    generateImageToVideoMutation.mutate({
+      segmentId: segment._id,
+      imageVersionId,
+    });
+  };
+
+  const handleGenerateTextToVideo = () => {
+    if (!textToVideoPrompt.trim())
+      return toast.error(t("toastVideoPromptEmpty"));
+    generateTextToVideoMutation.mutate({
+      segmentId: segment._id,
+      prompt: textToVideoPrompt,
+    });
+  };
+
+  const isAnyMutationPending =
+    isGenerating ||
+    regenerateImageMutation.isPending ||
+    editImageMutation.isPending ||
+    generateImageToVideoMutation.isPending ||
+    generateTextToVideoMutation.isPending;
 
   return (
     <div className="container mx-auto max-w-5xl p-4 pt-2">
@@ -299,37 +354,35 @@ export default function SegmentEditor() {
         <div className="grid grid-cols-1 md:grid-cols-[1fr,320px] gap-8 items-start">
           <div className="space-y-4">
             <div className="aspect-video w-full overflow-hidden rounded-lg border bg-muted flex items-center justify-center">
-              {displayMode === "video" && videoClipUrl ? (
+              {isAnyMutationPending ? (
+                <div className="flex flex-col items-center justify-center text-muted-foreground">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
+                  <span>{t("generationInProgress")}</span>
+                </div>
+              ) : selectedVideoClipVersion?.videoUrl ? (
                 <video
-                  src={videoClipUrl}
+                  src={selectedVideoClipVersion.videoUrl}
                   className="h-full w-full object-contain"
                   autoPlay
                   loop
                   muted
                   playsInline
-                  key={videoClipUrl}
+                  key={selectedVideoClipVersion._id}
                 />
-              ) : imageUrl && !segment.isGenerating ? (
+              ) : selectedImageVersion?.previewImageUrl ? (
                 <img
-                  src={imageUrl}
-                  alt={t("imageAltScene")}
+                  src={selectedImageVersion.previewImageUrl}
+                  alt={selectedImageVersion.prompt ?? t("imageAltScene")}
                   className="h-full w-full object-contain"
                 />
               ) : (
-                <div className="flex flex-col items-center justify-center text-muted-foreground">
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
-                      <span>{t("imageGenerating")}</span>
-                    </>
-                  ) : (
-                    t("imageNotAvailable")
-                  )}
+                <div className="p-4 text-center text-muted-foreground">
+                  {t("imageNotAvailable")}
                 </div>
               )}
             </div>
             <Tabs defaultValue="quick-edit" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="quick-edit">
                   <Bot className="mr-2 h-4 w-4" />
                   {t("tabQuickEdit")}
@@ -337,6 +390,10 @@ export default function SegmentEditor() {
                 <TabsTrigger value="regenerate">
                   <Sparkles className="mr-2 h-4 w-4" />
                   {t("tabRegenerate")}
+                </TabsTrigger>
+                <TabsTrigger value="generate-video">
+                  <Video className="mr-2 h-4 w-4" />
+                  {t("tabGenerateVideo")}
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="quick-edit">
@@ -357,9 +414,9 @@ export default function SegmentEditor() {
                       rows={3}
                       value={tuningPrompt}
                       onChange={(e) => setTuningPrompt(e.target.value)}
-                      disabled={isProcessing || !selectedImageVersion}
+                      disabled={isAnyMutationPending || !selectedImageVersion}
                     />
-                    {!selectedImageVersion && !isProcessing && (
+                    {!selectedImageVersion && !isAnyMutationPending && (
                       <p className="text-xs text-amber-600 dark:text-amber-500">
                         {t("editPromptError")}
                       </p>
@@ -367,15 +424,17 @@ export default function SegmentEditor() {
                   </div>
                   <Button
                     onClick={handleEditImage}
-                    disabled={isProcessing || !selectedImageVersion}
+                    disabled={isAnyMutationPending || !selectedImageVersion}
                     className="w-full"
                   >
-                    {isEditing ? (
+                    {editImageMutation.isPending ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
                       <Bot className="mr-2 h-4 w-4" />
                     )}
-                    {isEditing ? t("buttonEditing") : t("buttonApplyEdit")}
+                    {editImageMutation.isPending
+                      ? t("buttonEditing")
+                      : t("buttonApplyEdit")}
                   </Button>
                 </div>
               </TabsContent>
@@ -395,22 +454,59 @@ export default function SegmentEditor() {
                       rows={6}
                       value={promptText}
                       onChange={(e) => setPromptText(e.target.value)}
-                      disabled={isProcessing}
+                      disabled={isAnyMutationPending}
                     />
                   </div>
                   <Button
                     onClick={handleRegenerate}
-                    disabled={isProcessing}
+                    disabled={isAnyMutationPending}
                     className="w-full"
                   >
-                    {isRegenerating ? (
+                    {regenerateImageMutation.isPending ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
                       <Sparkles className="mr-2 h-4 w-4" />
                     )}
-                    {isRegenerating
+                    {regenerateImageMutation.isPending
                       ? t("buttonGenerating")
                       : t("buttonGenerateNewVersion")}
+                  </Button>
+                </div>
+              </TabsContent>
+              <TabsContent value="generate-video">
+                <div className="space-y-4 rounded-b-lg border border-t-0 bg-background p-4">
+                  <div className="space-y-1">
+                    <h4 className="font-semibold">{t("textToVideoTitle")}</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {t("textToVideoDescription")}
+                    </p>
+                  </div>
+                  <div className="grid w-full gap-2">
+                    <Label htmlFor="video-prompt-input">
+                      {t("videoPromptLabel")}
+                    </Label>
+                    <Textarea
+                      id="video-prompt-input"
+                      placeholder={t("videoPromptPlaceholder")}
+                      rows={3}
+                      value={textToVideoPrompt}
+                      onChange={(e) => setTextToVideoPrompt(e.target.value)}
+                      disabled={isAnyMutationPending}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleGenerateTextToVideo}
+                    disabled={isAnyMutationPending}
+                    className="w-full"
+                  >
+                    {generateTextToVideoMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Video className="mr-2 h-4 w-4" />
+                    )}
+                    {generateTextToVideoMutation.isPending
+                      ? t("buttonGenerating")
+                      : t("buttonGenerateVideoClip")}
                   </Button>
                 </div>
               </TabsContent>
@@ -425,28 +521,26 @@ export default function SegmentEditor() {
             <div className="space-y-2">
               <h3 className="font-semibold">{t("versionHistory")}</h3>
               <div className="max-h-[60vh] overflow-y-auto space-y-3 pr-2 border rounded-lg p-2 bg-muted/50">
-                {imageVersions && imageVersions.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    {t("noVersionHistory")}
-                  </p>
-                )}
-                {imageVersions?.map((version) => (
+                {imageVersionsWithSubVersions.length === 0 &&
+                  !isAnyMutationPending && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      {t("noVersionHistory")}
+                    </p>
+                  )}
+                {imageVersionsWithSubVersions.map((version) => (
                   <ImageVersionNode
                     key={version._id}
                     version={version}
-                    isImageSelected={version._id === segment.selectedVersionId}
-                    selectedVideoClipId={segment.selectedVideoClipVersionId}
-                    onSelectVersion={handleSelectVersion}
+                    isImageSelected={version._id === selectedImageVersion?._id}
+                    selectedVideoClipId={selectedVideoClipVersion?._id}
+                    onSelectImage={handleSelectImageVersion}
+                    onSelectVideo={handleSelectVideoClipVersion}
                     isSelecting={isSelecting}
-                    onGenerateVideo={(imageVersionId) =>
-                      generateVideoForImage({
-                        type: "image-to-video",
-                        imageVersionId,
-                      })
-                    }
-                    isGeneratingVideo={
-                      isGeneratingVideo &&
-                      generatingVideoVariables?.imageVersionId === version._id
+                    onGenerateVideo={handleGenerateImageToVideo}
+                    isGeneratingThisVideo={
+                      generateImageToVideoMutation.isPending &&
+                      generateImageToVideoMutation.variables?.imageVersionId ===
+                        version._id
                     }
                   />
                 ))}

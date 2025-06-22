@@ -12,102 +12,132 @@ import { useTranslation } from "react-i18next";
 
 // The data structure for an image version, now including its video children
 export type ImageVersionWithSubVersions = Doc<"imageVersions"> & {
-  imageUrl: string | null;
   previewImageUrl: string | null;
-  videoSubVersions: Doc<"videoClipVersions">[];
+  videoSubVersions: (Doc<"videoClipVersions"> & { videoUrl: string | null })[];
 };
-
-export type DisplayMode = "image" | "video";
 
 export function useSegmentEditor(segmentId: Id<"segments">) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   // 1. DATA FETCHING (Unchanged)
-  const { data, isLoading, refetch } = useQuery(
-    convexQuery(api.segments.getSegmentEditorData, { segmentId }),
+  const queryKey = useMemo(
+    () => convexQuery(api.segments.getSegmentEditorData, { segmentId }),
+    [segmentId],
   );
+  const { data, isLoading, refetch } = useQuery(queryKey);
 
   const segment = data?.segment;
-  const imageVersions = data?.imageVersions;
-  const videoClip = data?.videoClip;
-  const image = data?.image;
+  const imageVersions = data?.imageVersions ?? [];
+  const videoClipVersions = data?.videoClipVersions ?? [];
 
-  const [displayMode, setDisplayMode] = useState<DisplayMode>("image");
+  // 2. DATA TRANSFORMATION (Unchanged)
+  const imageVersionsWithSubVersions: ImageVersionWithSubVersions[] = useMemo(
+    () =>
+      imageVersions.map((img) => ({
+        ...img,
+        videoSubVersions: videoClipVersions
+          .filter(
+            (vid) =>
+              vid.context.type === "image_to_video" &&
+              vid.context.sourceImageId === img._id,
+          )
+          .map((vid) => ({
+            ...vid,
+            videoUrl:
+              videoClipVersions.find((v) => v._id === vid._id)?.videoUrl ??
+              null,
+          })),
+      })),
+    [imageVersions, videoClipVersions],
+  );
 
   const selectedImageVersion = useMemo(
-    () => imageVersions?.find((v) => v._id === segment?.selectedVersionId),
+    () => imageVersions.find((v) => v._id === segment?.selectedVersionId),
     [imageVersions, segment?.selectedVersionId],
   );
 
-  const imageUrl = image?.url;
-  const videoClipUrl = videoClip?.url;
+  const selectedVideoClipVersion = useMemo(
+    () =>
+      videoClipVersions.find(
+        (v) => v._id === segment?.selectedVideoClipVersionId,
+      ),
+    [videoClipVersions, segment?.selectedVideoClipVersionId],
+  );
 
-  useEffect(() => {
-    // 当数据加载或刷新时，根据后端返回的选中状态，智能地决定初始显示模式
-    if (segment?.selectedVideoClipVersionId && videoClipUrl) {
-      setDisplayMode("video");
-    } else {
-      setDisplayMode("image");
-    }
-  }, [segment?.selectedVideoClipVersionId, videoClipUrl]);
-
-  // 2. STATE MANAGEMENT (Unchanged)
+  // 3. STATE MANAGEMENT (Unchanged)
   const [promptText, setPromptText] = useState("");
   const [tuningPrompt, setTuningPrompt] = useState("");
 
-  // 3. MUTATIONS (Corrected to the right pattern)
-  const { mutateAsync: regenerateImage, isPending: isRegenerating } =
-    useTanstackMutation({
-      mutationFn: useConvexMutation(api.segments.regenerateImage),
-    });
+  // 4. MUTATIONS (REFACTORED to return full mutation objects)
+  const invalidateSegmentData = () =>
+    queryClient.invalidateQueries({ queryKey: queryKey.queryKey });
 
-  const { mutateAsync: editImage, isPending: isEditing } = useTanstackMutation({
-    mutationFn: useConvexMutation(api.segments.editImage),
+  const regenerateImageMutation = useTanstackMutation({
+    mutationFn: useConvexMutation(api.segments.regenerateImage),
+    onSuccess: () => {
+      toast.success(t("toastNewImageGenerationStarted"));
+      invalidateSegmentData();
+    },
+    onError: (e) => toast.error((e as Error).message),
   });
 
-  const { mutateAsync: selectImage, isPending: isSelectingImage } =
-    useTanstackMutation({
-      mutationFn: useConvexMutation(api.imageVersions.selectVersion),
-    });
+  const editImageMutation = useTanstackMutation({
+    mutationFn: useConvexMutation(api.segments.editImage),
+    onSuccess: () => {
+      toast.success(t("toastImageEditStarted"));
+      setTuningPrompt(""); // Also clear the prompt on success
+      invalidateSegmentData();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
 
-  const { mutateAsync: selectVideo, isPending: isSelectingVideo } =
-    useTanstackMutation({
-      mutationFn: useConvexMutation(api.segments.selectVideoClipVersion),
-    });
+  const selectImageMutation = useTanstackMutation({
+    mutationFn: useConvexMutation(api.imageVersions.selectVersion),
+    onSuccess: () => {
+      toast.success(t("toastVersionSelected"));
+      invalidateSegmentData();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
 
-  const {
-    mutateAsync: generateVideoForImage,
-    isPending: isGeneratingVideo,
-    variables: generatingVideoVariables,
-  } = useTanstackMutation({
-    mutationFn: useConvexMutation(api.segments.generateVideoClipForSegment),
+  const selectVideoMutation = useTanstackMutation({
+    mutationFn: useConvexMutation(api.segments.selectVideoClipVersion),
+    onSuccess: () => {
+      toast.success(t("toastVersionSelected"));
+      invalidateSegmentData();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const generateImageToVideoMutation = useTanstackMutation({
+    mutationFn: useConvexMutation(api.segments.generateImageToVideo),
     onSuccess: () => {
       toast.success(t("toastVideoClipGenerationStarted"));
-      queryClient.invalidateQueries({
-        queryKey: convexQuery(api.segments.getSegmentEditorData, {
-          segmentId,
-        }).queryKey,
-      });
+      invalidateSegmentData();
     },
-    onError: (error) => {
-      toast.error(t("toastVideoClipGenerationFailed"), {
-        description: error.message,
-      });
-    },
+    onError: (e) => toast.error((e as Error).message),
   });
 
-  const isSelecting = isSelectingImage || isSelectingVideo;
+  const generateTextToVideoMutation = useTanstackMutation({
+    mutationFn: useConvexMutation(api.segments.generateTextToVideo),
+    onSuccess: () => {
+      toast.success(t("toastVideoClipGenerationStarted"));
+      invalidateSegmentData();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
 
-  // 4. DERIVED STATE (Unchanged)
-  const isProcessing =
-    segment?.isGenerating || isRegenerating || isEditing || isGeneratingVideo;
+  // 5. DERIVED STATE (Simplified)
+  const isSelecting =
+    selectImageMutation.isPending || selectVideoMutation.isPending;
+  const isGenerating = segment?.isGenerating; // The backend now provides the single source of truth
 
-  // 5. SIDE EFFECTS (Unchanged, but good)
+  // 6. SIDE EFFECTS (Unchanged)
   useEffect(() => {
     if (selectedImageVersion?.prompt) {
       setPromptText(selectedImageVersion.prompt);
-    } else if (imageVersions && imageVersions.length > 0) {
+    } else if (imageVersions.length > 0) {
       const latestAiVersion = imageVersions.find(
         (v) => v.source === "ai_generated",
       );
@@ -120,81 +150,32 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
       toast.error(t("toastImageProcessFailed"), {
         description: segment.error,
       });
-      refetch(); // Refetch data on error to get updated status
+      invalidateSegmentData();
     }
-  }, [segment?.isGenerating, segment?.error, t, refetch]);
-
-  // 6. EVENT HANDLERS (Now work correctly with the fixed mutations)
-  const handleRegenerate = async () => {
-    if (!promptText.trim()) return toast.error(t("toastPromptEmpty"));
-    await regenerateImage({ segmentId, prompt: promptText });
-    toast.success(t("toastNewImageGenerationStarted"));
-  };
-
-  const handleEditImage = async () => {
-    if (!tuningPrompt.trim()) return toast.error(t("toastEditPromptEmpty"));
-    if (!selectedImageVersion) return toast.error(t("toastNoVersionSelected"));
-    await editImage({
-      segmentId,
-      prompt: tuningPrompt,
-      versionIdToEdit: selectedImageVersion._id,
-    });
-    toast.success(t("toastImageEditStarted"));
-    setTuningPrompt("");
-  };
-
-  const handleSelectVersion = async (
-    type: DisplayMode,
-    versionId: Id<"imageVersions"> | Id<"videoClipVersions">,
-  ) => {
-    if (isSelecting) return;
-    try {
-      const promise =
-        type === "image"
-          ? selectImage({
-              segmentId,
-              versionId: versionId as Id<"imageVersions">,
-            })
-          : selectVideo({
-              segmentId,
-              videoClipVersionId: versionId as Id<"videoClipVersions">,
-            });
-
-      // 关键改动：根据用户选择的类型，立即切换前端的显示模式
-      setDisplayMode(type);
-
-      await promise;
-      toast.success(t("toastVersionSelected"));
-      queryClient.invalidateQueries({
-        queryKey: convexQuery(api.segments.getSegmentEditorData, { segmentId })
-          .queryKey,
-      });
-    } catch (err) {
-      toast.error(t("toastVersionSelectFailed"));
-      console.error(err);
-    }
-  };
+  }, [segment?.isGenerating, segment?.error, t, invalidateSegmentData]);
 
   return {
+    // Data
     segment,
-    imageVersions,
-    imageUrl,
-    videoClipUrl,
-    displayMode,
+    imageVersionsWithSubVersions,
+    selectedImageVersion,
+    selectedVideoClipVersion,
+    // State
+    isLoading,
+    isGenerating,
+    isSelecting,
     promptText,
     setPromptText,
     tuningPrompt,
     setTuningPrompt,
-    handleRegenerate,
-    handleEditImage,
-    handleSelectVersion,
-    isProcessing,
-    isSelecting,
-    isEditing,
-    isRegenerating,
-    isLoading,
-    generateVideoForImage,
-    isGeneratingVideo,
-    generatingVideoVariables,
+    // Mutations (return the full objects)
+    regenerateImageMutation,
+    editImageMutation,
+    selectImageMutation,
+    selectVideoMutation,
+    generateImageToVideoMutation,
+    generateTextToVideoMutation,
+    // Actions
+    refetch,
   };
 }
