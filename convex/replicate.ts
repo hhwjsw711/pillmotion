@@ -7,9 +7,14 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { Jimp } from "jimp";
+import { fal } from "@fal-ai/client";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
+});
+
+fal.config({
+  credentials: process.env.FAL_KEY,
 });
 
 const openai = new OpenAI();
@@ -182,7 +187,7 @@ ${newInstruction}
 }
 
 // =================================================================
-// >> Section 2: Image Generation Actions (Largely Unchanged)
+// >> Section 2: Image Generation Actions (Unchanged)
 // =================================================================
 
 export const regenerateSegmentImageUsingPrompt = internalAction({
@@ -285,9 +290,13 @@ export const regenerateSegmentImageUsingPrompt = internalAction({
         },
       );
 
-      await ctx.scheduler.runAfter(0, internal.media.generateEmbeddingForImage, {
-        imageVersionId: newImageVersionId,
-      });
+      await ctx.scheduler.runAfter(
+        0,
+        internal.media.generateEmbeddingForImage,
+        {
+          imageVersionId: newImageVersionId,
+        },
+      );
 
       return true;
     } catch (err) {
@@ -400,9 +409,13 @@ export const editSegmentImageUsingPrompt = internalAction({
         },
       );
 
-      await ctx.scheduler.runAfter(0, internal.media.generateEmbeddingForImage, {
-        imageVersionId: newImageVersionId,
-      });
+      await ctx.scheduler.runAfter(
+        0,
+        internal.media.generateEmbeddingForImage,
+        {
+          imageVersionId: newImageVersionId,
+        },
+      );
     } catch (err) {
       const error = err as Error;
       console.error(error.message);
@@ -416,12 +429,23 @@ export const editSegmentImageUsingPrompt = internalAction({
 });
 
 // =================================================================
-// >> Section 3: Video Generation Actions (NEW & REFACTORED)
+// >> Section 3: Video Generation Actions (UPGRADED)
 // =================================================================
 
+/** [NEW] Helper to map story formats to aspect ratios for video models. */
+const getAspectRatio = (format?: string) => {
+  switch (format) {
+    case "horizontal":
+      return "16:9";
+    case "vertical":
+      return "9:16";
+    default:
+      return "16:9"; // Default to horizontal
+  }
+};
+
 /**
- * [NEW] Handles the "image-to-video" generation process.
- * It's called by the `generateImageToVideo` mutation in `segments.ts`.
+ * [FIXED] Handles the "image-to-video" generation process.
  */
 export const generateImageToVideoClip = internalAction({
   args: {
@@ -476,13 +500,11 @@ export const generateImageToVideoClip = internalAction({
         },
       });
 
-      // Step 5: Fetch the generated video and store it in Convex storage.
-      const videoUrl = String(output);
-      if (!videoUrl) throw new Error("Replicate did not return a video URL.");
-      const videoResponse = await fetch(videoUrl);
-      if (!videoResponse.ok)
-        throw new Error("Failed to fetch video from Replicate.");
-      const videoBuffer = await videoResponse.arrayBuffer();
+      // Step 5: Get the video data directly from the output object.
+      const videoBuffer = await (output as any).data();
+      if (!videoBuffer) {
+        throw new Error("Replicate did not return video data.");
+      }
       const videoStorageId = await ctx.storage.store(new Blob([videoBuffer]));
 
       // Step 6: Update the video clip record with the new storage ID and set status to "generated".
@@ -532,8 +554,7 @@ export const generateImageToVideoClip = internalAction({
 });
 
 /**
- * [NEW] Handles the "text-to-video" generation process.
- * It's called by the `generateTextToVideo` mutation in `segments.ts`.
+ * [FIXED & UPGRADED] Handles the "text-to-video" generation process using Google's Veo-3 model.
  */
 export const generateTextToVideoClip = internalAction({
   args: {
@@ -542,15 +563,17 @@ export const generateTextToVideoClip = internalAction({
     prompt: v.string(),
   },
   handler: async (ctx, args) => {
+    const videoModel = process.env.VIDEO_MODEL ?? "fal"; // Default to 'fal' for safety/cost
+    console.log(`Using video model: ${videoModel}`);
+
     let videoClipVersionId: Id<"videoClipVersions"> | null = null;
     try {
-      // Step 1: [CRITICAL] Create the video clip record using the schema-compliant function.
+      // Step 2: Create the video clip record in the database.
       videoClipVersionId = await ctx.runMutation(
         internal.segments.createVideoClipVersion,
         {
           segmentId: args.segmentId,
           userId: args.userId,
-          // Construct the `context` object for text-to-video.
           context: {
             type: "text_to_video",
             prompt: args.prompt,
@@ -558,25 +581,74 @@ export const generateTextToVideoClip = internalAction({
         },
       );
 
-      // Step 2: Call the Replicate API. Note: No start_image is provided.
-      const output = await replicate.run("kwaivgi/kling-v2.1", {
-        input: {
-          prompt: args.prompt,
-          mode: "standard",
-          duration: 5,
-          negative_prompt: "low quality, bad quality, blurry, cgi, fake",
-        },
-      });
+      let output: any;
+      let videoStorageId: Id<"_storage">;
 
-      // Step 3: Fetch, store, and update the record (same as image-to-video).
-      const videoUrl = String(output);
-      if (!videoUrl) throw new Error("Replicate did not return a video URL.");
-      const videoResponse = await fetch(videoUrl);
-      if (!videoResponse.ok)
-        throw new Error("Failed to fetch video from Replicate.");
-      const videoBuffer = await videoResponse.arrayBuffer();
-      const videoStorageId = await ctx.storage.store(new Blob([videoBuffer]));
+      if (videoModel === "fal") {
+        if (!process.env.FAL_KEY) throw new Error("FAL_KEY not set.");
+        // Step 2: Call the Fal.ai API, now with robust logging.
+        output = await fal.subscribe(
+          "fal-ai/minimax/hailuo-02/standard/text-to-video",
+          {
+            input: {
+              prompt: args.prompt,
+            },
+            logs: true,
+            onQueueUpdate: (update) => {
+              if (update.status === "IN_PROGRESS" && update.logs) {
+                update.logs.forEach((log) => console.log(log.message));
+              }
+            },
+          },
+        );
 
+        const videoUrl = (output as any).data?.video?.url;
+        if (!videoUrl) {
+          console.error("Fal.ai API response:", output);
+          throw new Error("Fal.ai did not return a valid video URL.");
+        }
+
+        const videoResponse = await fetch(videoUrl);
+        if (!videoResponse.ok) {
+          throw new Error("Failed to fetch video from Fal.ai URL.");
+        }
+
+        const video = await videoResponse.blob();
+        videoStorageId = await ctx.storage.store(video);
+      } else {
+        // Step 1: Get story format for determining the aspect ratio.
+        const segment = await ctx.runQuery(
+          internal.segments.getSegmentInternal,
+          {
+            segmentId: args.segmentId,
+          },
+        );
+        if (!segment)
+          throw new Error("Segment not found for text-to-video generation.");
+
+        const story = await ctx.runQuery(internal.story.getStoryInternal, {
+          storyId: segment.storyId,
+        });
+        if (!story)
+          throw new Error("Story not found for text-to-video generation.");
+
+        // Step 3: Call the Replicate API with the new google/veo-3 model.
+        output = await replicate.run("google/veo-3", {
+          input: {
+            prompt: args.prompt,
+            aspect_ratio: getAspectRatio(story.format),
+          },
+        });
+
+        // Step 4: Get the video data directly from the output object.
+        const videoBuffer = await (output as any).data();
+        if (!videoBuffer) {
+          throw new Error("Replicate did not return video data.");
+        }
+        videoStorageId = await ctx.storage.store(new Blob([videoBuffer]));
+      }
+
+      // Step 5: Update the database records with the new data.
       await ctx.runMutation(internal.segments.updateVideoClipVersion, {
         videoClipVersionId,
         storageId: videoStorageId,
