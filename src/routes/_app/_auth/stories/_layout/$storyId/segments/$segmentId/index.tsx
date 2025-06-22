@@ -11,7 +11,7 @@ import {
   ChevronDown,
   Video,
   Clapperboard,
-  Library, // [NEW] Import Library icon
+  Library,
 } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
@@ -22,12 +22,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { useTranslation } from "react-i18next";
 import {
   useSegmentEditor,
-  ImageVersionWithSubVersions,
+  type ImageVersionWithSubVersions,
 } from "@/hooks/useSegmentEditor";
 import { Spinner } from "@/ui/spinner";
 import { useState } from "react";
 import { toast } from "sonner";
-// [NEW] Import media library store and types
 import { useMediaLibraryStore } from "@/hooks/useMediaLibrary";
 import { SearchResult } from "@/hooks/useMediaLibrary";
 
@@ -131,40 +130,70 @@ function VideoClipCard({
   onSelect,
   isSelecting,
 }: {
-  clip: Doc<"videoClipVersions"> & { videoUrl: string | null };
+  clip: Doc<"videoClipVersions"> & {
+    videoUrl: string | null;
+    posterUrl: string | null;
+  };
   isSelected: boolean;
   onSelect: () => void;
   isSelecting: boolean;
 }) {
   const { t } = useTranslation();
+  const [isHovering, setIsHovering] = useState(false);
   const isError = clip.generationStatus === "error";
+  const isGenerating = clip.generationStatus === "generating";
 
   return (
     <div
       className={cn(
-        "p-2 rounded-lg border bg-background/50 flex items-center justify-between",
+        "p-2 rounded-lg border bg-background/50 flex items-center justify-between gap-2",
         isSelected && "ring-1 ring-primary/80",
         isError && "border-destructive/50 bg-destructive/10",
       )}
     >
-      <div className="flex items-center gap-3">
-        {isError ? (
-          <AlertTriangle className="h-5 w-5 text-destructive" />
-        ) : (
-          <Film className="h-5 w-5 text-muted-foreground" />
-        )}
-        <div className="text-xs">
-          <p className="font-semibold">
-            {isError ? t("videoClipGenFailed") : t("videoClipTitle")}
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div
+          className="w-20 h-12 bg-muted rounded flex-shrink-0 flex items-center justify-center"
+          onMouseEnter={() => setIsHovering(true)}
+          onMouseLeave={() => setIsHovering(false)}
+        >
+          {isHovering && clip.videoUrl ? (
+            <video
+              src={clip.videoUrl}
+              className="w-full h-full object-contain rounded"
+              autoPlay
+              muted
+              loop
+              playsInline
+            />
+          ) : clip.posterUrl ? (
+            <img
+              src={clip.posterUrl}
+              alt={t("videoClipTitle")}
+              className="w-full h-full object-contain rounded"
+            />
+          ) : isGenerating ? (
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          ) : isError ? (
+            <AlertTriangle className="h-5 w-5 text-destructive" />
+          ) : (
+            <Film className="h-5 w-5 text-muted-foreground" />
+          )}
+        </div>
+        <div className="text-xs flex-1 min-w-0">
+          <p className="font-semibold truncate">
+            {isGenerating
+              ? t("videoClipGenInProgress")
+              : isError
+                ? t("videoClipGenFailed")
+                : t("videoClipTitle")}
           </p>
           {isError && clip.statusMessage && (
-            <p className="text-destructive/80 line-clamp-1">
-              {clip.statusMessage}
-            </p>
+            <p className="text-destructive/80 truncate">{clip.statusMessage}</p>
           )}
         </div>
       </div>
-      {!isError && (
+      {!isError && !isGenerating && (
         <Button
           variant={isSelected ? "default" : "secondary"}
           size="xs"
@@ -252,7 +281,7 @@ export default function SegmentEditor() {
   const { t } = useTranslation();
   const {
     segment,
-    imageVersionsWithSubVersions,
+    versionHistory,
     selectedImageVersion,
     selectedVideoClipVersion,
     isLoading,
@@ -271,7 +300,6 @@ export default function SegmentEditor() {
   } = useSegmentEditor(segmentId as Id<"segments">);
 
   const [textToVideoPrompt, setTextToVideoPrompt] = useState("");
-  // [NEW] Get store methods to control the media library
   const { open: openMediaLibrary, setOnSelect } = useMediaLibraryStore();
 
   if (isLoading) {
@@ -286,7 +314,6 @@ export default function SegmentEditor() {
     return <div>{t("segmentNotFound")}</div>;
   }
 
-  // Event handlers now live in the component
   const handleRegenerate = () => {
     if (!promptText.trim()) return toast.error(t("toastPromptEmpty"));
     regenerateImageMutation.mutate({
@@ -318,10 +345,8 @@ export default function SegmentEditor() {
     });
   };
 
-  // [NEW] This handler is called when an item is selected from the library
   const handleSelectFromLibrary = (result: SearchResult) => {
     if (result.resultType === "image") {
-      // The `selectVersion` mutation on the backend now handles cloning
       selectImageMutation.mutate({
         segmentId: segment._id,
         versionId: result._id,
@@ -334,7 +359,6 @@ export default function SegmentEditor() {
     }
   };
 
-  // [NEW] This function configures and opens the media library
   const handleOpenLibrary = () => {
     setOnSelect(handleSelectFromLibrary);
     openMediaLibrary();
@@ -545,7 +569,6 @@ export default function SegmentEditor() {
             <div className="space-y-2">
               <h3 className="font-semibold">{t("uploadCustomImage")}</h3>
               <ImageUploader segmentId={segment._id} />
-              {/* [NEW] Button to open the media library */}
               <Button
                 variant="outline"
                 className="w-full"
@@ -558,29 +581,48 @@ export default function SegmentEditor() {
             <div className="space-y-2">
               <h3 className="font-semibold">{t("versionHistory")}</h3>
               <div className="max-h-[60vh] overflow-y-auto space-y-3 pr-2 border rounded-lg p-2 bg-muted/50">
-                {imageVersionsWithSubVersions.length === 0 &&
-                  !isAnyMutationPending && (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      {t("noVersionHistory")}
-                    </p>
-                  )}
-                {imageVersionsWithSubVersions.map((version) => (
-                  <ImageVersionNode
-                    key={version._id}
-                    version={version}
-                    isImageSelected={version._id === selectedImageVersion?._id}
-                    selectedVideoClipId={selectedVideoClipVersion?._id}
-                    onSelectImage={handleSelectImageVersion}
-                    onSelectVideo={handleSelectVideoClipVersion}
-                    isSelecting={isSelecting}
-                    onGenerateVideo={handleGenerateImageToVideo}
-                    isGeneratingThisVideo={
-                      generateImageToVideoMutation.isPending &&
-                      generateImageToVideoMutation.variables?.imageVersionId ===
-                        version._id
-                    }
-                  />
-                ))}
+                {versionHistory.length === 0 && !isAnyMutationPending && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    {t("noVersionHistory")}
+                  </p>
+                )}
+                {versionHistory.map((node) => {
+                  if (node.type === "image") {
+                    return (
+                      <ImageVersionNode
+                        key={node.version._id}
+                        version={node.version}
+                        isImageSelected={
+                          node.version._id === selectedImageVersion?._id
+                        }
+                        selectedVideoClipId={selectedVideoClipVersion?._id}
+                        onSelectImage={handleSelectImageVersion}
+                        onSelectVideo={handleSelectVideoClipVersion}
+                        isSelecting={isSelecting}
+                        onGenerateVideo={handleGenerateImageToVideo}
+                        isGeneratingThisVideo={
+                          generateImageToVideoMutation.isPending &&
+                          generateImageToVideoMutation.variables
+                            ?.imageVersionId === node.version._id
+                        }
+                      />
+                    );
+                  } else {
+                    return (
+                      <VideoClipCard
+                        key={node.version._id}
+                        clip={node.version}
+                        isSelected={
+                          node.version._id === selectedVideoClipVersion?._id
+                        }
+                        onSelect={() =>
+                          handleSelectVideoClipVersion(node.version._id)
+                        }
+                        isSelecting={isSelecting}
+                      />
+                    );
+                  }
+                })}
               </div>
             </div>
           </div>

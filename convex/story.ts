@@ -185,7 +185,8 @@ export const deleteStory = mutation({
 
       for (const version of imageVersions) {
         if (version.image) await ctx.storage.delete(version.image);
-        if (version.previewImage) await ctx.storage.delete(version.previewImage);
+        if (version.previewImage)
+          await ctx.storage.delete(version.previewImage);
         await ctx.db.delete(version._id);
       }
       await ctx.db.delete(segment._id);
@@ -301,8 +302,13 @@ export const generateVideoOrchestrator = internalAction({
       // Step 3: [FIXED] For each segment, start a schema-compliant "image-to-video" task.
       const clipGenerationPromises = segments.map((segment) => {
         if (!segment.selectedVersionId) {
-          console.error(`Segment ${segment._id} has no selected image, skipping.`);
-          return Promise.resolve({ success: false, error: "No image selected" });
+          console.error(
+            `Segment ${segment._id} has no selected image, skipping.`,
+          );
+          return Promise.resolve({
+            success: false,
+            error: "No image selected",
+          });
         }
         // [CRITICAL FIX] Call the correct, new action with the correct parameters.
         return ctx.runAction(internal.replicate.generateImageToVideoClip, {
@@ -317,7 +323,9 @@ export const generateVideoOrchestrator = internalAction({
       const hasErrors = clipGenerationResults.some((r) => !r.success);
 
       if (hasErrors) {
-        const failedCount = clipGenerationResults.filter((r) => !r.success).length;
+        const failedCount = clipGenerationResults.filter(
+          (r) => !r.success,
+        ).length;
         await ctx.runMutation(internal.story.updateVideoVersionStatus, {
           videoVersionId,
           status: "error",
@@ -332,7 +340,10 @@ export const generateVideoOrchestrator = internalAction({
         });
       }
     } catch (error: any) {
-      console.error(`Video orchestrator failed for video version ${videoVersionId}:`, error);
+      console.error(
+        `Video orchestrator failed for video version ${videoVersionId}:`,
+        error,
+      );
       await ctx.runMutation(internal.story.updateVideoVersionStatus, {
         videoVersionId,
         status: "error",
@@ -399,7 +410,9 @@ export const generateStoryOrchestrator = internalAction({
   handler: async (ctx, args) => {
     const { storyId, userId, generationId } = args;
     try {
-      const story = await ctx.runQuery(internal.story.getStoryInternal, { storyId });
+      const story = await ctx.runQuery(internal.story.getStoryInternal, {
+        storyId,
+      });
       if (!story) throw new Error("Story not found");
 
       let segments: string[];
@@ -418,7 +431,10 @@ export const generateStoryOrchestrator = internalAction({
       }
 
       const context = await generateContext(story.script);
-      await ctx.runMutation(internal.story.updateStoryContextInternal, { storyId, context });
+      await ctx.runMutation(internal.story.updateStoryContextInternal, {
+        storyId,
+        context,
+      });
 
       const segmentGenerationPromises = segments.map((text, order) =>
         ctx.runAction(internal.segments.generateAndCreateSegment, {
@@ -431,10 +447,14 @@ export const generateStoryOrchestrator = internalAction({
       );
 
       const results = await Promise.all(segmentGenerationPromises);
-      const currentStory = await ctx.runQuery(internal.story.getStoryInternal, { storyId });
+      const currentStory = await ctx.runQuery(internal.story.getStoryInternal, {
+        storyId,
+      });
 
       if (currentStory?.generationId !== generationId) {
-        console.log(`Orchestrator (genId: ${generationId}) is obsolete. Aborting.`);
+        console.log(
+          `Orchestrator (genId: ${generationId}) is obsolete. Aborting.`,
+        );
         return;
       }
 
@@ -444,7 +464,10 @@ export const generateStoryOrchestrator = internalAction({
         status: hasErrors ? "error" : "completed",
       });
     } catch (error: any) {
-      console.error(`Orchestrator (genId: ${generationId}) failed for story ${storyId}:`, error);
+      console.error(
+        `Orchestrator (genId: ${generationId}) failed for story ${storyId}:`,
+        error,
+      );
       await ctx.runMutation(internal.story.updateStoryGenerationStatus, {
         storyId,
         status: "error",
@@ -539,19 +562,41 @@ export const internalUpdateStoryThumbnail = internalAction({
     );
 
     let thumbnailUrl: string | null = null;
-    if (firstSegment?.selectedVersionId) {
-      const selectedVersion = await ctx.runQuery(
-        internal.imageVersions.getVersionInternal,
-        { versionId: firstSegment.selectedVersionId },
-      );
-      if (selectedVersion?.previewImage) {
-        try {
-          thumbnailUrl = await ctx.storage.getUrl(selectedVersion.previewImage);
-        } catch (e) {
-          console.error(`Error getting URL for thumbnail for story ${storyId}`, e);
+
+    if (firstSegment) {
+      try {
+        // [UPGRADE] Prioritize video poster for the thumbnail
+        if (firstSegment.selectedVideoClipVersionId) {
+          const selectedClip = await ctx.runQuery(
+            internal.segments.getVideoClipVersionInternal,
+            { versionId: firstSegment.selectedVideoClipVersionId },
+          );
+          if (selectedClip?.posterStorageId) {
+            thumbnailUrl = await ctx.storage.getUrl(
+              selectedClip.posterStorageId,
+            );
+          }
         }
+        // Fallback to image preview if no video is selected or it has no poster
+        else if (firstSegment.selectedVersionId) {
+          const selectedVersion = await ctx.runQuery(
+            internal.imageVersions.getVersionInternal,
+            { versionId: firstSegment.selectedVersionId },
+          );
+          if (selectedVersion?.previewImage) {
+            thumbnailUrl = await ctx.storage.getUrl(
+              selectedVersion.previewImage,
+            );
+          }
+        }
+      } catch (e) {
+        console.error(
+          `Error getting URL for thumbnail for story ${storyId}`,
+          e,
+        );
       }
     }
+
     await ctx.runMutation(internal.story.setStoryThumbnailUrl, {
       storyId,
       thumbnailUrl,

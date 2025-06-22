@@ -52,10 +52,10 @@ async function selectVersionHelper(
   args: { segmentId: Id<"segments">; versionId: Id<"imageVersions"> },
 ) {
   // [CRITICAL FIX] When an image is selected, any selected video must be deselected.
-  // This makes the UI logic much simpler and more predictable.
+  // Using `null` is the correct way to clear a field in a patch operation.
   await ctx.db.patch(args.segmentId, {
     selectedVersionId: args.versionId,
-    selectedVideoClipVersionId: undefined, // Clear the selected video
+    selectedVideoClipVersionId: undefined, // [CORRECTION] Use undefined instead of null
     isGenerating: false,
     error: undefined,
   });
@@ -155,7 +155,10 @@ export const processUploadedImage = internalAction({
         previewImageId: previewStorageId,
       });
     } catch (error: any) {
-      console.error(`Failed to process uploaded image for segment ${args.segmentId}:`, error);
+      console.error(
+        `Failed to process uploaded image for segment ${args.segmentId}:`,
+        error,
+      );
       await ctx.runMutation(internal.segments.updateSegmentStatus, {
         segmentId: args.segmentId,
         isGenerating: false,
@@ -195,11 +198,16 @@ export const selectVersion = mutation({
     versionId: v.id("imageVersions"),
   },
   async handler(ctx, args) {
-    await verifySegmentOwner(ctx, args.segmentId);
+    const { userId } = await verifySegmentOwner(ctx, args.segmentId);
 
     const originalVersion = await ctx.db.get(args.versionId);
     if (!originalVersion) {
       throw new Error("Original image version not found");
+    }
+
+    // [SECURITY FIX] Ensure the user owns the original version they are trying to use.
+    if (originalVersion.userId !== userId) {
+      throw new Error("You do not have permission to use this image.");
     }
 
     let versionToSelectId = args.versionId;

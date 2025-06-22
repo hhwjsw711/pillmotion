@@ -270,6 +270,7 @@ const schema = defineSchema({
     userIdString: v.string(),
     context: videoClipContextValidator,
     storageId: v.optional(v.id("_storage")),
+    posterStorageId: v.optional(v.id("_storage")),
     generationStatus: videoClipGenerationStatusValidator,
     processingStatus: v.optional(videoProcessingStatusValidator),
     statusMessage: v.optional(v.string()),

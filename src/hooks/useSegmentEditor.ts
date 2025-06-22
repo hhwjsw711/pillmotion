@@ -10,11 +10,30 @@ import { Id, Doc } from "~/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
-// The data structure for an image version, now including its video children
+// [UPGRADE] Expand the sub-version type to include the new posterUrl.
 export type ImageVersionWithSubVersions = Doc<"imageVersions"> & {
   previewImageUrl: string | null;
-  videoSubVersions: (Doc<"videoClipVersions"> & { videoUrl: string | null })[];
+  videoSubVersions: (Doc<"videoClipVersions"> & {
+    videoUrl: string | null;
+    posterUrl: string | null;
+  })[];
 };
+
+// [NEW] Define a type for the new unified timeline model
+export type HistoryTimelineNode =
+  | {
+      type: "image";
+      version: ImageVersionWithSubVersions;
+      _creationTime: number;
+    }
+  | {
+      type: "video";
+      version: Doc<"videoClipVersions"> & {
+        videoUrl: string | null;
+        posterUrl: string | null;
+      };
+      _creationTime: number;
+    };
 
 export function useSegmentEditor(segmentId: Id<"segments">) {
   const { t } = useTranslation();
@@ -31,26 +50,39 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
   const imageVersions = data?.imageVersions ?? [];
   const videoClipVersions = data?.videoClipVersions ?? [];
 
-  // 2. DATA TRANSFORMATION (Unchanged)
-  const imageVersionsWithSubVersions: ImageVersionWithSubVersions[] = useMemo(
-    () =>
-      imageVersions.map((img) => ({
-        ...img,
-        videoSubVersions: videoClipVersions
-          .filter(
-            (vid) =>
-              vid.context.type === "image_to_video" &&
-              vid.context.sourceImageId === img._id,
-          )
-          .map((vid) => ({
-            ...vid,
-            videoUrl:
-              videoClipVersions.find((v) => v._id === vid._id)?.videoUrl ??
-              null,
-          })),
-      })),
-    [imageVersions, videoClipVersions],
-  );
+  // [REFACTOR] Create a unified, sorted timeline instead of the old tree structure
+  const versionHistory: HistoryTimelineNode[] = useMemo(() => {
+    // 1. Create nodes for each image version, attaching their video children
+    const imageNodes: HistoryTimelineNode[] = imageVersions.map((img) => {
+      const subVersions = videoClipVersions.filter(
+        (vid) =>
+          vid.context.type === "image_to_video" &&
+          vid.context.sourceImageId === img._id,
+      );
+      return {
+        type: "image",
+        version: {
+          ...img,
+          videoSubVersions: subVersions,
+        },
+        _creationTime: img._creationTime,
+      };
+    });
+
+    // 2. Create nodes for standalone text-to-video clips
+    const standaloneVideoNodes: HistoryTimelineNode[] = videoClipVersions
+      .filter((vid) => vid.context.type === "text_to_video")
+      .map((vid) => ({
+        type: "video",
+        version: vid,
+        _creationTime: vid._creationTime,
+      }));
+
+    // 3. Combine and sort into a single timeline, newest first
+    return [...imageNodes, ...standaloneVideoNodes].sort(
+      (a, b) => b._creationTime - a._creationTime,
+    );
+  }, [imageVersions, videoClipVersions]);
 
   const selectedImageVersion = useMemo(
     () => imageVersions.find((v) => v._id === segment?.selectedVersionId),
@@ -157,7 +189,7 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
   return {
     // Data
     segment,
-    imageVersionsWithSubVersions,
+    versionHistory, // [REPLACE] Export the new unified timeline
     selectedImageVersion,
     selectedVideoClipVersion,
     // State

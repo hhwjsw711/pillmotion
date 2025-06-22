@@ -14,8 +14,11 @@ import { convexQuery } from "@convex-dev/react-query";
 // details and has broken in a newer version. The most robust approach is to
 // explicitly define the type based on the return shape of the
 // `api.segments.getSegmentsWithPreview` query.
-type SegmentWithImageUrl = Doc<"segments"> & {
+// [UPGRADE] Rename and expand the type to handle both image and video previews.
+type SegmentWithPreview = Doc<"segments"> & {
   previewImageUrl: string | null;
+  posterUrl: string | null;
+  videoUrl: string | null;
 };
 
 /**
@@ -32,7 +35,7 @@ export function useStorySegments(storyId: Id<"story">) {
   const query = convexQuery(api.segments.getSegmentsWithPreview, { storyId });
   const { data: segmentsData, isLoading } = useQuery(query);
 
-  const [activeSegments, setActiveSegments] = useState<SegmentWithImageUrl[]>(
+  const [activeSegments, setActiveSegments] = useState<SegmentWithPreview[]>(
     [],
   );
   useEffect(() => {

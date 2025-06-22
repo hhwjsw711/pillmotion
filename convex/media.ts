@@ -21,7 +21,8 @@ export type ImageSearchResult = Doc<"imageVersions"> & {
 
 export type VideoSearchResult = Doc<"videoClipVersions"> & {
   resultType: "video";
-  previewUrl: string | null;
+  previewUrl: string | null; // This is the source image for i2v, if it exists
+  posterUrl: string | null; // [NEW] This is the video's own poster/thumbnail
   videoUrl: string | null;
   _score: number;
 };
@@ -89,7 +90,10 @@ export const generateEmbeddingForImage = internalAction({
         });
       }
     } catch (error) {
-      console.error(`Failed to generate embedding for image ${imageVersionId}`, error);
+      console.error(
+        `Failed to generate embedding for image ${imageVersionId}`,
+        error,
+      );
     }
   },
 });
@@ -125,7 +129,9 @@ export const generateEmbeddingForVideo = internalAction({
     const prompt = videoVersion.context.prompt;
 
     if (!prompt) {
-      console.warn(`Video clip version ${videoClipVersionId} has no prompt in its context. Skipping embedding.`);
+      console.warn(
+        `Video clip version ${videoClipVersionId} has no prompt in its context. Skipping embedding.`,
+      );
       return;
     }
 
@@ -138,7 +144,10 @@ export const generateEmbeddingForVideo = internalAction({
         });
       }
     } catch (error) {
-      console.error(`Failed to generate embedding for video ${videoClipVersionId}`, error);
+      console.error(
+        `Failed to generate embedding for video ${videoClipVersionId}`,
+        error,
+      );
     }
   },
 });
@@ -155,7 +164,11 @@ async function translateToEnglishIfNeeded(text: string): Promise<string> {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "You are an expert translator. Translate the given text to English. Respond with only the English translation, without any explanations or quotation marks." },
+        {
+          role: "system",
+          content:
+            "You are an expert translator. Translate the given text to English. Respond with only the English translation, without any explanations or quotation marks.",
+        },
         { role: "user", content: text },
       ],
       temperature: 0,
@@ -174,7 +187,9 @@ export const getBatchOfImages = internalQuery({
     const nonNullRecords = records.filter(Boolean) as Doc<"imageVersions">[];
     return await Promise.all(
       nonNullRecords.map(async (record) => {
-        const previewUrl = record.previewImage ? await ctx.storage.getUrl(record.previewImage) : null;
+        const previewUrl = record.previewImage
+          ? await ctx.storage.getUrl(record.previewImage)
+          : null;
         return {
           resultType: "image" as const,
           ...record,
@@ -193,12 +208,20 @@ export const getBatchOfVideos = internalQuery({
   args: { ids: v.array(v.id("videoClipVersions")) },
   handler: async (ctx, { ids }) => {
     const records = await Promise.all(ids.map((id) => ctx.db.get(id)));
-    const nonNullRecords = records.filter(Boolean) as Doc<"videoClipVersions">[];
+    const nonNullRecords = records.filter(
+      Boolean,
+    ) as Doc<"videoClipVersions">[];
     return await Promise.all(
       nonNullRecords.map(async (record) => {
-        const videoUrl = record.storageId ? await ctx.storage.getUrl(record.storageId) : null;
+        // [UPGRADE] Fetch video URL and poster URL in parallel
+        const [videoUrl, posterUrl] = await Promise.all([
+          record.storageId ? ctx.storage.getUrl(record.storageId) : null,
+          record.posterStorageId
+            ? ctx.storage.getUrl(record.posterStorageId)
+            : null,
+        ]);
 
-        // [CRITICAL FIX] Get the preview from the source image, if it exists in the context.
+        // Get the preview from the source image, if it exists in the context.
         let previewUrl: string | null = null;
         if (record.context.type === "image_to_video") {
           const sourceImage = await ctx.db.get(record.context.sourceImageId);
@@ -212,6 +235,7 @@ export const getBatchOfVideos = internalQuery({
           ...record,
           previewUrl,
           videoUrl,
+          posterUrl, // [NEW] Add posterUrl to the return object
         };
       }),
     );
@@ -225,8 +249,16 @@ export const getRecentMedia = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, { userId }): Promise<SearchResult[]> => {
     const [images, videos] = await Promise.all([
-      ctx.db.query("imageVersions").withIndex("by_user", (q) => q.eq("userId", userId)).order("desc").take(10),
-      ctx.db.query("videoClipVersions").withIndex("by_user", (q) => q.eq("userId", userId)).order("desc").take(10),
+      ctx.db
+        .query("imageVersions")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .order("desc")
+        .take(10),
+      ctx.db
+        .query("videoClipVersions")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .order("desc")
+        .take(10),
     ]);
 
     // Hydrate images with URLs
@@ -234,7 +266,9 @@ export const getRecentMedia = internalQuery({
       images.map(async (record) => ({
         ...record,
         resultType: "image" as const,
-        previewUrl: record.previewImage ? await ctx.storage.getUrl(record.previewImage) : null,
+        previewUrl: record.previewImage
+          ? await ctx.storage.getUrl(record.previewImage)
+          : null,
         _score: 0,
       })),
     );
@@ -242,9 +276,15 @@ export const getRecentMedia = internalQuery({
     // Hydrate videos with URLs
     const videosWithData: VideoSearchResult[] = await Promise.all(
       videos.map(async (record) => {
-        const videoUrl = record.storageId ? await ctx.storage.getUrl(record.storageId) : null;
+        // [UPGRADE] Fetch video URL and poster URL in parallel
+        const [videoUrl, posterUrl] = await Promise.all([
+          record.storageId ? ctx.storage.getUrl(record.storageId) : null,
+          record.posterStorageId
+            ? ctx.storage.getUrl(record.posterStorageId)
+            : null,
+        ]);
 
-        // [CRITICAL FIX] Resolve preview URL from context
+        // Resolve preview URL from context
         let previewUrl: string | null = null;
         if (record.context.type === "image_to_video") {
           const sourceImage = await ctx.db.get(record.context.sourceImageId);
@@ -252,17 +292,17 @@ export const getRecentMedia = internalQuery({
             previewUrl = await ctx.storage.getUrl(sourceImage.previewImage);
           }
         }
-        
         return {
           ...record,
           resultType: "video" as const,
           previewUrl,
           videoUrl,
+          posterUrl, // [NEW] Add posterUrl to the return object
           _score: 0,
         };
       }),
     );
-    
+
     const combined: SearchResult[] = [...imagesWithData, ...videosWithData];
     combined.sort((a, b) => b._creationTime - a._creationTime);
     return combined.slice(0, 20);
@@ -284,7 +324,9 @@ export const searchMedia = action({
 
     if (searchText) {
       const englishSearchText = await translateToEnglishIfNeeded(searchText);
-      console.log(`Original search: "${searchText}", Translated to: "${englishSearchText}"`);
+      console.log(
+        `Original search: "${searchText}", Translated to: "${englishSearchText}"`,
+      );
 
       const queryEmbedding = await getTextEmbedding(englishSearchText);
       if (!queryEmbedding) return [];
@@ -305,16 +347,28 @@ export const searchMedia = action({
       ]);
 
       const SCORE_THRESHOLD = 0.85;
-      const filteredImageHits = imageHits.filter((hit) => hit._score > SCORE_THRESHOLD);
-      const filteredVideoHits = videoHits.filter((hit) => hit._score > SCORE_THRESHOLD);
+      const filteredImageHits = imageHits.filter(
+        (hit) => hit._score > SCORE_THRESHOLD,
+      );
+      const filteredVideoHits = videoHits.filter(
+        (hit) => hit._score > SCORE_THRESHOLD,
+      );
 
       const [images, videos] = await Promise.all([
-        ctx.runQuery(internal.media.getBatchOfImages, { ids: filteredImageHits.map((h) => h._id) }),
-        ctx.runQuery(internal.media.getBatchOfVideos, { ids: filteredVideoHits.map((h) => h._id) }),
+        ctx.runQuery(internal.media.getBatchOfImages, {
+          ids: filteredImageHits.map((h) => h._id),
+        }),
+        ctx.runQuery(internal.media.getBatchOfVideos, {
+          ids: filteredVideoHits.map((h) => h._id),
+        }),
       ]);
-      
-      const imageScoreMap = new Map(filteredImageHits.map((hit) => [hit._id, hit._score]));
-      const videoScoreMap = new Map(filteredVideoHits.map((hit) => [hit._id, hit._score]));
+
+      const imageScoreMap = new Map(
+        filteredImageHits.map((hit) => [hit._id, hit._score]),
+      );
+      const videoScoreMap = new Map(
+        filteredVideoHits.map((hit) => [hit._id, hit._score]),
+      );
 
       const scoredImages: ImageSearchResult[] = images.map((img) => ({
         ...img,
@@ -325,7 +379,10 @@ export const searchMedia = action({
         _score: videoScoreMap.get(vid._id)!,
       }));
 
-      const combinedResults: SearchResult[] = [...scoredImages, ...scoredVideos];
+      const combinedResults: SearchResult[] = [
+        ...scoredImages,
+        ...scoredVideos,
+      ];
       combinedResults.sort((a, b) => b._score - a._score);
       return combinedResults.slice(0, 20);
     } else {

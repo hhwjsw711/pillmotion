@@ -15,9 +15,11 @@ import { toast } from "sonner";
 import { Loader2, GripVertical, MoreHorizontal, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-// [FIX] The type now correctly reflects the data provided by the parent component.
+// [UPGRADE] The type now includes video-related URLs from the backend.
 type SegmentWithPreview = Doc<"segments"> & {
   previewImageUrl: string | null;
+  posterUrl: string | null;
+  videoUrl: string | null;
 };
 
 interface SegmentCardProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -30,6 +32,7 @@ export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
   ({ segment, storyId, dragHandleProps, ...props }, ref) => {
     const { t } = useTranslation();
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+    const [isHovering, setIsHovering] = useState(false); // [NEW] State to track hover
     const deleteSegmentMutation = useConvexMutation(api.segments.deleteSegment);
 
     const { mutate: deleteSegment, isPending: isDeleting } =
@@ -187,12 +190,30 @@ export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
               to="/stories/$storyId/segments/$segmentId"
               params={{ storyId: segment.storyId, segmentId: segment._id }}
               className="block aspect-video w-full cursor-pointer bg-muted transition-opacity hover:opacity-80"
+              onMouseEnter={() => setIsHovering(true)}
+              onMouseLeave={() => setIsHovering(false)}
             >
               {segment.isGenerating ? (
                 <div className="flex h-full w-full items-center justify-center text-muted-foreground">
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   {t("imageGeneratingInProgress")}
                 </div>
+              ) : isHovering && segment.videoUrl ? (
+                <video
+                  key={segment.videoUrl}
+                  src={segment.videoUrl}
+                  className="h-full w-full object-contain"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                />
+              ) : segment.posterUrl ? (
+                <img
+                  src={segment.posterUrl}
+                  alt={t("sceneLabel", { order: segment.order + 1 })}
+                  className="h-full w-full object-contain"
+                />
               ) : segment.previewImageUrl ? (
                 <img
                   src={segment.previewImageUrl}

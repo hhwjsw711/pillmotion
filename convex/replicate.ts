@@ -520,6 +520,12 @@ export const generateImageToVideoClip = internalAction({
         videoClipVersionId: videoClipVersionId,
       });
 
+      // [NEW] Schedule poster generation for the new video clip
+      await ctx.scheduler.runAfter(0, internal.videoProcessing.generatePoster, {
+        storageId: videoStorageId,
+        clipId: videoClipVersionId,
+      });
+
       // Step 8: Schedule embedding generation for the media library.
       await ctx.scheduler.runAfter(
         0,
@@ -592,6 +598,8 @@ export const generateTextToVideoClip = internalAction({
           {
             input: {
               prompt: args.prompt,
+              duration: "6",
+              prompt_optimizer: true,
             },
             logs: true,
             onQueueUpdate: (update) => {
@@ -658,6 +666,12 @@ export const generateTextToVideoClip = internalAction({
       await ctx.runMutation(internal.segments.internalLinkVideoToSegment, {
         segmentId: args.segmentId,
         videoClipVersionId: videoClipVersionId,
+      });
+
+      // [NEW] Schedule poster generation for the new video clip
+      await ctx.scheduler.runAfter(0, internal.videoProcessing.generatePoster, {
+        storageId: videoStorageId,
+        clipId: videoClipVersionId,
       });
 
       await ctx.scheduler.runAfter(

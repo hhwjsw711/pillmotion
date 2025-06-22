@@ -64,12 +64,22 @@ export const getSegmentEditorData = query({
         .collect()
         .then((versions) =>
           Promise.all(
-            versions.map(async (version) => ({
-              ...version,
-              videoUrl: version.storageId
-                ? await ctx.storage.getUrl(version.storageId)
-                : null,
-            })),
+            versions.map(async (version) => {
+              // [NEW] Fetch video URL and poster URL in parallel for efficiency
+              const [videoUrl, posterUrl] = await Promise.all([
+                version.storageId
+                  ? ctx.storage.getUrl(version.storageId)
+                  : null,
+                version.posterStorageId
+                  ? ctx.storage.getUrl(version.posterStorageId)
+                  : null,
+              ]);
+              return {
+                ...version,
+                videoUrl,
+                posterUrl,
+              };
+            }),
           ),
         ),
     ]);
@@ -179,11 +189,16 @@ export const selectVideoClipVersion = mutation({
     videoClipVersionId: v.id("videoClipVersions"),
   },
   handler: async (ctx, { segmentId, videoClipVersionId }) => {
-    await verifySegmentOwner(ctx, segmentId);
+    const { userId } = await verifySegmentOwner(ctx, segmentId);
 
     const originalVersion = await ctx.db.get(videoClipVersionId);
     if (!originalVersion) {
       throw new Error("Original video clip version not found");
+    }
+
+    // [SECURITY FIX] Ensure the user owns the original clip they are trying to use.
+    if (originalVersion.userId !== userId) {
+      throw new Error("You do not have permission to use this video clip.");
     }
 
     let versionToSelectId = videoClipVersionId;
@@ -206,13 +221,26 @@ export const selectVideoClipVersion = mutation({
       versionToSelectId = newVersionId;
     }
 
-    // Atomically update the segment to point to the correct video version
-    // and clear any loading/error states.
+    // [FIX] Atomically update the segment to point to the correct video version,
+    // CLEAR the selected image version, and clear any loading/error states.
     await ctx.db.patch(segmentId, {
       selectedVideoClipVersionId: versionToSelectId,
+      selectedVersionId: undefined, // [CORRECTION] Use undefined instead of null
       isGenerating: false,
       error: undefined,
     });
+
+    // [CONSISTENCY] Also trigger a story thumbnail update.
+    const segment = await ctx.db.get(segmentId);
+    if (segment) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.story.internalUpdateStoryThumbnail,
+        {
+          storyId: segment.storyId,
+        },
+      );
+    }
   },
 });
 
@@ -468,8 +496,11 @@ export const internalLinkVideoToSegment = internalMutation({
     videoClipVersionId: v.id("videoClipVersions"),
   },
   handler: async (ctx, { segmentId, videoClipVersionId }) => {
+    // [FIX] When a new video is generated and linked, it becomes the selected
+    // version, so the selected image must be deselected.
     await ctx.db.patch(segmentId, {
       selectedVideoClipVersionId: videoClipVersionId,
+      selectedVersionId: undefined, // [CORRECTION] Use undefined instead of null
       isGenerating: false,
       error: undefined,
     });
@@ -650,7 +681,7 @@ The scene to illustrate will be provided in the user message.
 export const getSegmentsWithPreview = query({
   args: { storyId: v.id("story") },
   async handler(ctx, args) {
-      await verifyStoryOwner(ctx, args.storyId);
+    await verifyStoryOwner(ctx, args.storyId);
 
     const segments = await ctx.db
       .query("segments")
@@ -661,6 +692,10 @@ export const getSegmentsWithPreview = query({
     return Promise.all(
       segments.map(async (segment) => {
         let previewImageUrl: string | null = null;
+        let posterUrl: string | null = null;
+        let videoUrl: string | null = null;
+
+        // Fetch preview for the selected image version, if any
         if (segment.selectedVersionId) {
           const selectedVersion = await ctx.db.get(segment.selectedVersionId);
           if (selectedVersion?.previewImage) {
@@ -670,15 +705,44 @@ export const getSegmentsWithPreview = query({
               );
             } catch (e) {
               console.error(
-                `Failed to get URL for segment ${segment._id} preview.`,
+                `Failed to get URL for segment ${segment._id} image preview.`,
                 e,
               );
             }
           }
         }
+
+        // Fetch preview for the selected video clip version, if any
+        if (segment.selectedVideoClipVersionId) {
+          const selectedClip = await ctx.db.get(
+            segment.selectedVideoClipVersionId,
+          );
+          if (selectedClip) {
+            try {
+              const [fetchedVideoUrl, fetchedPosterUrl] = await Promise.all([
+                selectedClip.storageId
+                  ? ctx.storage.getUrl(selectedClip.storageId)
+                  : null,
+                selectedClip.posterStorageId
+                  ? ctx.storage.getUrl(selectedClip.posterStorageId)
+                  : null,
+              ]);
+              videoUrl = fetchedVideoUrl;
+              posterUrl = fetchedPosterUrl;
+            } catch (e) {
+              console.error(
+                `Failed to get URL for segment ${segment._id} video preview.`,
+                e,
+              );
+            }
+          }
+        }
+
         return {
           ...segment,
           previewImageUrl,
+          posterUrl,
+          videoUrl,
         };
       }),
     );

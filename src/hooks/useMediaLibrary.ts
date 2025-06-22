@@ -12,9 +12,11 @@ export type ImageSearchResult = Doc<"imageVersions"> & {
   _score: number;
 };
 
+// [FIX] The type definition is now aligned with the backend, including `posterUrl`.
 export type VideoSearchResult = Doc<"videoClipVersions"> & {
   resultType: "video";
   previewUrl: string | null;
+  posterUrl: string | null; // This was the missing property.
   videoUrl: string | null;
   _score: number;
 };

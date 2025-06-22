@@ -194,8 +194,16 @@ const SearchResultCard = ({
   onSelect,
 }: SearchResultCardProps) => {
   const { t } = useTranslation();
+  const [isHovering, setIsHovering] = useState(false);
   const isVideo = result.resultType === "video";
   const prompt = getPrompt(result);
+
+  // A more type-safe way to access video properties
+  const videoResult = isVideo
+    ? (result as Extract<SearchResult, { resultType: "video" }>)
+    : null;
+
+  const thumbnailUrl = videoResult?.posterUrl ?? result.previewUrl;
 
   return (
     <Button
@@ -205,16 +213,33 @@ const SearchResultCard = ({
         isSelected && "ring-2 ring-primary ring-offset-2",
       )}
       onClick={() => onSelect(result)}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
     >
-      {result.previewUrl ? (
+      {/* [FIX] The check is now inlined, which allows TypeScript to correctly narrow the type of `videoResult.videoUrl` to `string`. */}
+      {isHovering && videoResult?.videoUrl ? (
+        <video
+          key={videoResult.videoUrl}
+          src={videoResult.videoUrl}
+          className="w-full h-full object-cover"
+          autoPlay
+          muted
+          loop
+          playsInline
+        />
+      ) : thumbnailUrl ? (
         <img
-          src={result.previewUrl}
+          src={thumbnailUrl}
           alt={prompt || t("mediaLibraryAssetAlt")}
           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
         />
       ) : (
         <div className="w-full h-full bg-muted flex items-center justify-center">
-          <ImageIcon className="w-10 h-10 text-muted-foreground" />
+          {isVideo ? (
+            <Video className="w-10 h-10 text-muted-foreground" />
+          ) : (
+            <ImageIcon className="w-10 h-10 text-muted-foreground" />
+          )}
         </div>
       )}
 
@@ -244,10 +269,13 @@ const DetailView = ({
 }) => {
   const { t } = useTranslation();
   const prompt = getPrompt(result);
-  const typeText =
-    result.resultType === "image"
-      ? t("mediaLibraryAssetTypeImage")
-      : t("mediaLibraryAssetTypeVideo");
+  const isVideo = result.resultType === "video";
+  const videoResult = isVideo
+    ? (result as Extract<SearchResult, { resultType: "video" }>)
+    : null;
+  const typeText = isVideo
+    ? t("mediaLibraryAssetTypeVideo")
+    : t("mediaLibraryAssetTypeImage");
 
   return (
     <>
@@ -261,11 +289,17 @@ const DetailView = ({
       </div>
       <div className="flex-1 p-4 overflow-y-auto">
         <div className="aspect-square bg-muted rounded-lg mb-4">
-          {result.resultType === "video" && result.videoUrl ? (
+          {videoResult?.videoUrl ? (
             <video
-              src={result.videoUrl}
+              src={videoResult.videoUrl}
               controls
               autoPlay
+              className="w-full h-full object-contain rounded-lg"
+            />
+          ) : videoResult?.posterUrl ? (
+            <img
+              src={videoResult.posterUrl}
+              alt={prompt || t("mediaLibraryUntitled")}
               className="w-full h-full object-contain rounded-lg"
             />
           ) : result.previewUrl ? (
