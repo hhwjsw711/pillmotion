@@ -14,16 +14,21 @@ const getPrompt = (result: SearchResult): string | undefined => {
   if (result.resultType === "image") {
     return result.prompt;
   }
-  return result.context.prompt;
+  // This correctly handles all video context types
+  if (
+    result.context.type === "image_to_video" ||
+    result.context.type === "text_to_video"
+  ) {
+    return result.context.prompt;
+  }
+  return undefined;
 };
 
-interface MediaLibraryModalProps {
-  onSelect?: (result: SearchResult) => void;
-}
-
-export const MediaLibraryModal = ({ onSelect }: MediaLibraryModalProps) => {
+// [REFACTORED] The modal is now fully self-contained and takes no props.
+export const MediaLibraryModal = () => {
   const { t } = useTranslation();
-  const { isOpen, close: closeStore } = useMediaLibraryStore();
+  // It gets ALL its state and callbacks from the global store.
+  const { isOpen, close: closeStore, onSelect } = useMediaLibraryStore();
   const { searchTerm, setSearchTerm, results, isLoading, error } =
     useMediaLibrary();
 
@@ -31,15 +36,16 @@ export const MediaLibraryModal = ({ onSelect }: MediaLibraryModalProps) => {
     null,
   );
 
+  // This function now correctly calls the `onSelect` callback from the store.
   const handleSelectAndClose = (result: SearchResult) => {
-    onSelect?.(result);
+    onSelect(result);
     closeStore();
     setSelectedResult(null);
   };
 
   const handleClose = () => {
     closeStore();
-    setSelectedResult(null);
+    setSelectedResult(null); // Also clear local selection on close
   };
 
   return (
@@ -87,7 +93,8 @@ export const MediaLibraryModal = ({ onSelect }: MediaLibraryModalProps) => {
   );
 };
 
-// --- Strict Prop Types ---
+// --- Child Components (Unchanged) ---
+
 interface ContentProps {
   isLoading: boolean;
   error: string | null;
@@ -134,7 +141,6 @@ const Content = ({
     );
   }
 
-  // At this point, results are empty, not loading, and no error.
   if (searchTerm) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -164,7 +170,7 @@ const SearchResultsGrid = ({
   selectedResult,
   onSelect,
 }: SearchResultsGridProps) => (
-  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
     {results.map((result) => (
       <SearchResultCard
         key={result._id}
@@ -255,20 +261,20 @@ const DetailView = ({
       </div>
       <div className="flex-1 p-4 overflow-y-auto">
         <div className="aspect-square bg-muted rounded-lg mb-4">
-          {result.resultType === "video" ? (
+          {result.resultType === "video" && result.videoUrl ? (
             <video
-              src={result.videoUrl!}
+              src={result.videoUrl}
               controls
               autoPlay
               className="w-full h-full object-contain rounded-lg"
             />
-          ) : (
+          ) : result.previewUrl ? (
             <img
-              src={result.previewUrl!}
+              src={result.previewUrl}
               alt={prompt || t("mediaLibraryUntitled")}
               className="w-full h-full object-contain rounded-lg"
             />
-          )}
+          ) : null}
         </div>
         <div className="space-y-2">
           <h4 className="font-semibold">{t("promptLabel")}</h4>

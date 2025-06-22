@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Video,
   Clapperboard,
+  Library, // [NEW] Import Library icon
 } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
@@ -26,6 +27,9 @@ import {
 import { Spinner } from "@/ui/spinner";
 import { useState } from "react";
 import { toast } from "sonner";
+// [NEW] Import media library store and types
+import { useMediaLibraryStore } from "@/hooks/useMediaLibrary";
+import { SearchResult } from "@/hooks/useMediaLibrary";
 
 export const Route = createFileRoute(
   "/_app/_auth/stories/_layout/$storyId/segments/$segmentId/",
@@ -267,6 +271,8 @@ export default function SegmentEditor() {
   } = useSegmentEditor(segmentId as Id<"segments">);
 
   const [textToVideoPrompt, setTextToVideoPrompt] = useState("");
+  // [NEW] Get store methods to control the media library
+  const { open: openMediaLibrary, setOnSelect } = useMediaLibraryStore();
 
   if (isLoading) {
     return (
@@ -310,6 +316,28 @@ export default function SegmentEditor() {
       segmentId: segment._id,
       videoClipVersionId: versionId,
     });
+  };
+
+  // [NEW] This handler is called when an item is selected from the library
+  const handleSelectFromLibrary = (result: SearchResult) => {
+    if (result.resultType === "image") {
+      // The `selectVersion` mutation on the backend now handles cloning
+      selectImageMutation.mutate({
+        segmentId: segment._id,
+        versionId: result._id,
+      });
+    } else if (result.resultType === "video") {
+      selectVideoMutation.mutate({
+        segmentId: segment._id,
+        videoClipVersionId: result._id,
+      });
+    }
+  };
+
+  // [NEW] This function configures and opens the media library
+  const handleOpenLibrary = () => {
+    setOnSelect(handleSelectFromLibrary);
+    openMediaLibrary();
   };
 
   const handleGenerateImageToVideo = (imageVersionId: Id<"imageVersions">) => {
@@ -517,6 +545,15 @@ export default function SegmentEditor() {
             <div className="space-y-2">
               <h3 className="font-semibold">{t("uploadCustomImage")}</h3>
               <ImageUploader segmentId={segment._id} />
+              {/* [NEW] Button to open the media library */}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleOpenLibrary}
+              >
+                <Library className="mr-2 h-4 w-4" />
+                {t("useFromLibrary")}
+              </Button>
             </div>
             <div className="space-y-2">
               <h3 className="font-semibold">{t("versionHistory")}</h3>

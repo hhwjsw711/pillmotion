@@ -204,5 +204,7 @@
   "mediaLibraryNoPrompt": "无提示词",
   "mediaLibraryUseThis": "使用此{{type}}",
   "mediaLibraryAssetTypeImage": "图片",
-  "mediaLibraryAssetTypeVideo": "视频"
+  "mediaLibraryAssetTypeVideo": "视频",
+  "mediaLibraryUploadFailed": "图片上传失败。",
+  "useFromLibrary": "从媒体库选用"
 }

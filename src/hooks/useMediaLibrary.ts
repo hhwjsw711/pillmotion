@@ -1,11 +1,11 @@
 import { create } from "zustand";
+import { useEffect, useState } from "react";
 import { useAction } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { Doc } from "../../convex/_generated/dataModel";
-import { useState, useEffect } from "react";
+import { api } from "~/convex/_generated/api";
+import { Doc } from "~/convex/_generated/dataModel";
+import { useDebounce } from "use-debounce";
 
 // --- Types for Search Results ---
-// We redefine these types on the frontend to ensure type safety.
 export type ImageSearchResult = Doc<"imageVersions"> & {
   resultType: "image";
   previewUrl: string | null;
@@ -21,71 +21,90 @@ export type VideoSearchResult = Doc<"videoClipVersions"> & {
 
 export type SearchResult = ImageSearchResult | VideoSearchResult;
 
-// Zustand store for managing the modal's global state (open/closed)
+// Zustand store for managing the modal's global state
 interface MediaLibraryState {
   isOpen: boolean;
+  onSelect: (result: SearchResult) => void;
   open: () => void;
   close: () => void;
+  setOnSelect: (callback: (result: SearchResult) => void) => void;
 }
 
 export const useMediaLibraryStore = create<MediaLibraryState>((set) => ({
   isOpen: false,
+  onSelect: () => {}, // Default empty callback
   open: () => set({ isOpen: true }),
-  close: () => set({ isOpen: false }),
+  close: () => set({ isOpen: false, onSelect: () => {} }), // Reset callback on close
+  setOnSelect: (callback) => set({ onSelect: callback }),
 }));
 
-// The main hook that encapsulates all logic for the media library
-export const useMediaLibrary = () => {
+// [REFACTORED] The main hook now correctly uses `useAction` for the search functionality.
+export function useMediaLibrary() {
+  const { isOpen } = useMediaLibraryStore();
   const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 300);
+
+  // State to manually manage results, loading, and errors from the action.
+  const [state, setState] = useState<{
+    results: SearchResult[];
+    isLoading: boolean;
+    error: string | null;
+  }>({
+    results: [],
+    isLoading: false,
+    error: null,
+  });
 
   const searchAction = useAction(api.media.searchMedia);
+  const [refetchIndex, setRefetchIndex] = useState(0);
 
-  // 1. Debounce the search term
   useEffect(() => {
-    const timerId = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm);
-    }, 300); // Wait for 300ms after user stops typing
+    // Do not run the action if the modal is closed.
+    if (!isOpen) {
+      // Clear state when modal is not visible to avoid showing stale data.
+      setState({ results: [], isLoading: false, error: null });
+      return;
+    }
 
-    return () => {
-      clearTimeout(timerId);
-    };
-  }, [searchTerm]);
+    let isCancelled = false;
 
-  // 2. Perform the search action when the debounced term changes
-  useEffect(() => {
     const performSearch = async () => {
-      // [核心修改] 我们移除了之前的 `if (!debouncedSearchTerm)` 检查。
-      // 现在，无论搜索词是否为空，我们都会执行搜索。
-
-      setIsLoading(true);
-      setError(null);
+      setState((s) => ({ ...s, isLoading: true, error: null }));
       try {
-        // 如果搜索词是空字符串 ""，我们就传递 `undefined` 给后端。
-        // 这会触发后端调用 getRecentMedia 函数，从而获取您最近的素材。
-        const searchResults = await searchAction({
+        const data = await searchAction({
           searchText: debouncedSearchTerm || undefined,
         });
-        setResults(searchResults);
-      } catch (e: any) {
-        setError("Failed to search media library. Please try again.");
-        console.error(e);
-      } finally {
-        setIsLoading(false);
+        if (!isCancelled) {
+          setState({ results: data, isLoading: false, error: null });
+        }
+      } catch (err) {
+        if (!isCancelled) {
+          setState({
+            results: [],
+            isLoading: false,
+            error: err instanceof Error ? err.message : "Unknown error",
+          });
+        }
       }
     };
 
     performSearch();
-  }, [debouncedSearchTerm, searchAction]);
+
+    // Cleanup function to prevent state updates on an unmounted component.
+    return () => {
+      isCancelled = true;
+    };
+  }, [isOpen, debouncedSearchTerm, searchAction, refetchIndex]);
+
+  const refetch = () => setRefetchIndex((i) => i + 1);
 
   return {
+    isOpen,
     searchTerm,
     setSearchTerm,
-    results,
-    isLoading,
-    error,
+    results: state.results,
+    isLoading: state.isLoading,
+    error: state.error,
+    refetch,
   };
-};
+}

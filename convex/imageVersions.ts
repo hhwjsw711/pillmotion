@@ -197,14 +197,35 @@ export const selectVersion = mutation({
   async handler(ctx, args) {
     await verifySegmentOwner(ctx, args.segmentId);
 
-    const version = await ctx.db.get(args.versionId);
-    if (!version || version.segmentId !== args.segmentId) {
-      throw new Error("Version does not belong to this segment.");
+    const originalVersion = await ctx.db.get(args.versionId);
+    if (!originalVersion) {
+      throw new Error("Original image version not found");
     }
 
+    let versionToSelectId = args.versionId;
+
+    // [MODIFIED] If the selected version belongs to another segment or no segment,
+    // we must CLONE it to maintain data integrity.
+    if (originalVersion.segmentId !== args.segmentId) {
+      const newVersionId = await ctx.db.insert("imageVersions", {
+        // Carry over essential, immutable data
+        userId: originalVersion.userId,
+        userIdString: originalVersion.userIdString,
+        prompt: originalVersion.prompt,
+        image: originalVersion.image,
+        previewImage: originalVersion.previewImage,
+        embedding: originalVersion.embedding,
+        // Set new segment-specific data for the clone
+        segmentId: args.segmentId, // Link to the current segment
+        source: "from_library", // Mark it as from the library
+      });
+      versionToSelectId = newVersionId;
+    }
+
+    // Now, select the (potentially new) version for the segment.
     await selectVersionHelper(ctx, {
       segmentId: args.segmentId,
-      versionId: args.versionId,
+      versionId: versionToSelectId,
     });
   },
 });

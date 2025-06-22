@@ -204,5 +204,7 @@
   "mediaLibraryNoPrompt": "No prompt provided.",
   "mediaLibraryUseThis": "Use this {{type}}",
   "mediaLibraryAssetTypeImage": "image",
-  "mediaLibraryAssetTypeVideo": "video"
+  "mediaLibraryAssetTypeVideo": "video",
+  "mediaLibraryUploadFailed": "Image upload failed.",
+  "useFromLibrary": "Use from Library"
 }
