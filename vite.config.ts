@@ -5,6 +5,15 @@ import path from "path";
 
 export default defineConfig({
   plugins: [TanStackRouterVite(), viteReact()],
+  optimizeDeps: {
+    exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util"],
+  },
+  server: {
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "credentialless",
+    },
+  },
   resolve: {
     alias: {
       "~": __dirname,

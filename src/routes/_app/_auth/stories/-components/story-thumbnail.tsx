@@ -25,7 +25,7 @@ export function StoryThumbnail({
   return (
     <div
       className={cn(
-        "aspect-video w-full overflow-hidden bg-secondary",
+        "relative aspect-video w-full overflow-hidden bg-secondary",
         className,
       )}
     >

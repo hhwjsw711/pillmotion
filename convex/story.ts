@@ -20,6 +20,7 @@ import { consumeCreditsHelper } from "./credits";
 import OpenAI from "openai";
 import { nanoid } from "nanoid";
 import { verifyStoryOwner } from "./lib/auth";
+import { Doc } from "./_generated/dataModel";
 
 const openai = new OpenAI();
 
@@ -273,7 +274,6 @@ export const generateVideoOrchestrator = internalAction({
     });
 
     try {
-      // Step 1: [NEW] Fetch the main video version record to get necessary context.
       const videoVersion = await ctx.runQuery(
         internal.story.getVideoVersionInternal,
         { id: videoVersionId },
@@ -285,7 +285,6 @@ export const generateVideoOrchestrator = internalAction({
       }
       const { generationId, userId } = videoVersion;
 
-      // Step 2: Get all segments for the story.
       const segments = await ctx.runQuery(internal.segments.getSegments, {
         storyId,
       });
@@ -299,8 +298,21 @@ export const generateVideoOrchestrator = internalAction({
         return;
       }
 
-      // Step 3: [FIXED] For each segment, start a schema-compliant "image-to-video" task.
       const clipGenerationPromises = segments.map((segment) => {
+        // =================================================================
+        // >> [NEW] The "Smart Check" is here!
+        // =================================================================
+        // If this segment ALREADY has a selected video clip, we skip it.
+        if (segment.selectedVideoClipVersionId) {
+          console.log(
+            `Segment ${segment._id} already has a video clip, skipping generation.`,
+          );
+          // We must return a resolved promise with a success state
+          // so that `Promise.all` works correctly.
+          return Promise.resolve({ success: true });
+        }
+        // =================================================================
+
         if (!segment.selectedVersionId) {
           console.error(
             `Segment ${segment._id} has no selected image, skipping.`,
@@ -310,13 +322,30 @@ export const generateVideoOrchestrator = internalAction({
             error: "No image selected",
           });
         }
-        // [CRITICAL FIX] Call the correct, new action with the correct parameters.
-        return ctx.runAction(internal.replicate.generateImageToVideoClip, {
-          segmentId: segment._id,
-          imageVersionId: segment.selectedVersionId,
-          userId: userId, // Pass the correct user ID.
-          generationId: generationId, // Pass the parent generation ID to link clips.
-        });
+
+        const imageVersionId = segment.selectedVersionId;
+
+        return ctx
+          .runMutation(internal.segments.updateSegmentStatus, {
+            segmentId: segment._id,
+            isGenerating: true,
+          })
+          .then(() =>
+            ctx.runAction(internal.replicate.generateImageToVideoClip, {
+              segmentId: segment._id,
+              imageVersionId: imageVersionId,
+              userId: userId,
+              generationId: generationId,
+            }),
+          )
+          .then(() => ({ success: true }))
+          .catch((error) => {
+            console.error(
+              `Clip generation failed for segment ${segment._id}:`,
+              error,
+            );
+            return { success: false, error: error.message };
+          });
       });
 
       const clipGenerationResults = await Promise.all(clipGenerationPromises);
@@ -332,11 +361,11 @@ export const generateVideoOrchestrator = internalAction({
           statusMessage: `${failedCount} out of ${segments.length} clips failed to generate.`,
         });
       } else {
-        // TODO: This is where the "merge clips" step will be triggered in the future.
         await ctx.runMutation(internal.story.updateVideoVersionStatus, {
           videoVersionId,
           status: "generated",
-          statusMessage: "All clips generated. Merging is not yet implemented.",
+          statusMessage:
+            "All clips generated. Ready for review and manual stitching.",
         });
       }
     } catch (error: any) {
@@ -617,11 +646,22 @@ export const getStoryPageData = query({
       .withIndex("by_story", (q) => q.eq("storyId", args.storyId))
       .collect();
 
-    const identity = await ctx.auth.getUserIdentity();
-    let videoVersion = null;
-    if (identity && story.userId === identity.subject) {
+    // [最终修复] 使用 auth.getUserId(ctx) 来获取正确的用户ID进行比较
+    const userId = await auth.getUserId(ctx);
+    let videoVersion:
+      | (Doc<"videoVersions"> & { videoUrl: string | null })
+      | null = null;
+
+    // 使用正确的用户ID恢复所有权检查
+    if (userId && story.userId === userId) {
       if (story.selectedVideoVersionId) {
-        videoVersion = await ctx.db.get(story.selectedVideoVersionId);
+        const versionDoc = await ctx.db.get(story.selectedVideoVersionId);
+        if (versionDoc) {
+          const videoUrl = versionDoc.storageId
+            ? await ctx.storage.getUrl(versionDoc.storageId)
+            : null;
+          videoVersion = { ...versionDoc, videoUrl };
+        }
       }
     }
 

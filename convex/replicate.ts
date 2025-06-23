@@ -500,12 +500,21 @@ export const generateImageToVideoClip = internalAction({
         },
       });
 
-      // Step 5: Get the video data directly from the output object.
-      const videoBuffer = await (output as any).data();
-      if (!videoBuffer) {
-        throw new Error("Replicate did not return video data.");
+      // Step 5: [FINAL FIX] Robustly get the video URL from the Replicate output.
+      const videoUrl = Array.isArray(output) ? output[0] : String(output);
+      if (!videoUrl || typeof videoUrl !== "string") {
+        console.error("Replicate API response:", output);
+        throw new Error("Replicate did not return a valid video URL.");
       }
-      const videoStorageId = await ctx.storage.store(new Blob([videoBuffer]));
+
+      const videoResponse = await fetch(videoUrl);
+      if (!videoResponse.ok) {
+        throw new Error(
+          `Failed to fetch video from Replicate URL: ${videoResponse.statusText}`,
+        );
+      }
+      const videoBlob = await videoResponse.blob();
+      const videoStorageId = await ctx.storage.store(videoBlob);
 
       // Step 6: Update the video clip record with the new storage ID and set status to "generated".
       await ctx.runMutation(internal.segments.updateVideoClipVersion, {
@@ -560,7 +569,7 @@ export const generateImageToVideoClip = internalAction({
 });
 
 /**
- * [FIXED & UPGRADED] Handles the "text-to-video" generation process using Google's Veo-3 model.
+ * [FIXED & UPGRADED] Handles the "text-to-video" generation process.
  */
 export const generateTextToVideoClip = internalAction({
   args: {
@@ -587,13 +596,12 @@ export const generateTextToVideoClip = internalAction({
         },
       );
 
-      let output: any;
       let videoStorageId: Id<"_storage">;
 
       if (videoModel === "fal") {
         if (!process.env.FAL_KEY) throw new Error("FAL_KEY not set.");
-        // Step 2: Call the Fal.ai API, now with robust logging.
-        output = await fal.subscribe(
+        // Call Fal.ai API
+        const output = await fal.subscribe(
           "fal-ai/minimax/hailuo-02/standard/text-to-video",
           {
             input: {
@@ -624,7 +632,8 @@ export const generateTextToVideoClip = internalAction({
         const video = await videoResponse.blob();
         videoStorageId = await ctx.storage.store(video);
       } else {
-        // Step 1: Get story format for determining the aspect ratio.
+        // This 'else' block handles Replicate models
+        // Get story format for determining the aspect ratio.
         const segment = await ctx.runQuery(
           internal.segments.getSegmentInternal,
           {
@@ -640,20 +649,29 @@ export const generateTextToVideoClip = internalAction({
         if (!story)
           throw new Error("Story not found for text-to-video generation.");
 
-        // Step 3: Call the Replicate API with the new google/veo-3 model.
-        output = await replicate.run("google/veo-3", {
+        // Call the Replicate API
+        const output = await replicate.run("google/veo-3", {
           input: {
             prompt: args.prompt,
             aspect_ratio: getAspectRatio(story.format),
           },
         });
 
-        // Step 4: Get the video data directly from the output object.
-        const videoBuffer = await (output as any).data();
-        if (!videoBuffer) {
-          throw new Error("Replicate did not return video data.");
+        // [FINAL FIX] Robustly get the video URL from the Replicate output.
+        const videoUrl = Array.isArray(output) ? output[0] : String(output);
+        if (!videoUrl || typeof videoUrl !== "string") {
+          console.error("Replicate API response:", output);
+          throw new Error("Replicate did not return a valid video URL.");
         }
-        videoStorageId = await ctx.storage.store(new Blob([videoBuffer]));
+
+        const videoResponse = await fetch(videoUrl);
+        if (!videoResponse.ok) {
+          throw new Error(
+            `Failed to fetch video from Replicate URL: ${videoResponse.statusText}`,
+          );
+        }
+        const videoBlob = await videoResponse.blob();
+        videoStorageId = await ctx.storage.store(videoBlob);
       }
 
       // Step 5: Update the database records with the new data.

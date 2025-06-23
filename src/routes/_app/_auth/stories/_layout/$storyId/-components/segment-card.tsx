@@ -196,7 +196,7 @@ export const SegmentCard = forwardRef<HTMLDivElement, SegmentCardProps>(
               {segment.isGenerating ? (
                 <div className="flex h-full w-full items-center justify-center text-muted-foreground">
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  {t("imageGeneratingInProgress")}
+                  {t("generating")}
                 </div>
               ) : isHovering && segment.videoUrl ? (
                 <video

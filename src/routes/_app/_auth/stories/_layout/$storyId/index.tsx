@@ -17,6 +17,8 @@ import {
   UploadCloud,
   Undo2,
   Video,
+  Scissors, // [NEW] Import Scissors icon
+  CheckCircle2, // [NEW] Import Check icon
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -43,7 +45,6 @@ export const Route = createFileRoute("/_app/_auth/stories/_layout/$storyId/")({
   component: Story,
 });
 
-// [REFACTORED] The type is now correctly inferred from the hook's return value
 type SegmentWithImageUrl = ReturnType<
   typeof useStorySegments
 >["segmentsData"][number];
@@ -122,11 +123,17 @@ function StorySection({
   const { t } = useTranslation();
   const storyId = story._id;
   const updateStatusMutation = useConvexMutation(api.story.updateStatus);
+
+  // [MODIFIED] Destructure all the new state and handlers from our hook
   const {
     videoVersion,
-    isGeneratingVideo,
+    isGeneratingClips,
     canGenerateVideo,
     handleGenerateVideo,
+    isStitching,
+    stitchingProgress,
+    canStitchVideo,
+    handleStitchVideo,
   } = useStoryDetailPage(storyId);
 
   const { mutate: updateStatus, isPending: isUpdatingStatus } = useMutation({
@@ -150,8 +157,9 @@ function StorySection({
   });
 
   const videoStatus = videoVersion?.generationStatus;
+  // [MODIFIED] Update the master "is busy" flag
   const isAnythingGenerating =
-    story.generationStatus === "processing" || isGeneratingVideo;
+    story.generationStatus === "processing" || isGeneratingClips || isStitching;
 
   return (
     <div className="space-y-6">
@@ -176,13 +184,26 @@ function StorySection({
             {story.generationStatus === "error" && (
               <Badge variant="destructive">{t("statusGenerationFailed")}</Badge>
             )}
-            {isGeneratingVideo && (
+            {/* [MODIFIED] Badges for video generation and stitching */}
+            {isGeneratingClips && (
               <Badge variant="outline" className="flex items-center gap-1.5">
                 <Spinner />
                 {`${t(videoStatus ?? "generating")}...`}
               </Badge>
             )}
-            {videoVersion?.generationStatus === "generated" && (
+            {isStitching && (
+              <Badge variant="outline" className="flex items-center gap-1.5">
+                <Spinner />
+                {`${t("stitching")}... ${stitchingProgress}%`}
+              </Badge>
+            )}
+            {canStitchVideo && (
+              <Badge variant="secondary" className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                {t("clipsReadyForStitching")}
+              </Badge>
+            )}
+            {videoVersion?.storageId && (
               <Badge variant="success" className="flex items-center gap-1.5">
                 <Video className="h-4 w-4" />
                 {t("videoReady")}
@@ -193,6 +214,7 @@ function StorySection({
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* [MODIFIED] "Generate Clips" Button */}
             <Button
               variant="default"
               onClick={handleGenerateVideo}
@@ -203,13 +225,37 @@ function StorySection({
                   : t("generateVideoTooltip")
               }
             >
-              {isGeneratingVideo ? (
+              {isGeneratingClips ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Clapperboard className="mr-2 h-4 w-4" />
               )}
-              {t("generateVideo")}
+              {t("generateClips")}
             </Button>
+
+            {/* [NEW] Stitch Button */}
+            <Button
+              variant="secondary"
+              onClick={handleStitchVideo}
+              disabled={
+                !canStitchVideo || isGeneratingClips || isStitching
+              }
+              title={
+                canStitchVideo
+                  ? t("stitchVideoTooltip")
+                  : t("clipsNotReadyForStitchingTooltip")
+              }
+            >
+              {isStitching ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Scissors className="mr-2 h-4 w-4" />
+              )}
+              {isStitching
+                ? `${t("stitching")}... ${stitchingProgress}%`
+                : t("stitchVideo")}
+            </Button>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -244,8 +290,6 @@ function StorySection({
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-
-                {/* Dynamically show Publish or Unpublish button */}
                 {story.status !== "published" ? (
                   <DropdownMenuItem onSelect={() => updateStatus("published")}>
                     <UploadCloud className="mr-2 h-4 w-4" />
@@ -262,6 +306,21 @@ function StorySection({
           </div>
         </div>
       </div>
+
+      {/* [NEW] Show final video when ready */}
+      {videoVersion?.storageId && videoVersion.videoUrl && (
+        <div className="w-full max-w-3xl mx-auto bg-black rounded-lg shadow-xl overflow-hidden">
+          <video
+            src={videoVersion.videoUrl}
+            controls
+            className="w-full h-full"
+            key={videoVersion.storageId}
+          >
+            {t("videoTagNotSupported")}
+          </video>
+        </div>
+      )}
+
       <StorySegments story={story} />
     </div>
   );
@@ -275,7 +334,6 @@ function StorySegments({
   const { _id: storyId } = story;
   const { t } = useTranslation();
 
-  // [REFACTORED] 1. Destructure `isLoading` and remove `activeSegments`
   const {
     segmentsData,
     isLoading,
@@ -287,7 +345,6 @@ function StorySegments({
 
   const sensors = useSensors(pointerSensor);
 
-  // [REFACTORED] 2. Use `isLoading` for a more reliable loading state
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 gap-y-4 md:grid-cols-2 md:gap-x-8 lg:grid-cols-3">
@@ -323,7 +380,6 @@ function StorySegments({
       onDragEnd={handleDragEnd}
     >
       <SortableContext
-        // [REFACTORED] 3. Use `segmentsData` for the list items
         items={segmentsData.map((s) => s._id)}
         strategy={rectSortingStrategy}
       >

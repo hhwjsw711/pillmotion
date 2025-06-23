@@ -5,3 +5,9 @@
 
 [context.production]
   command = "npx convex deploy --cmd 'npm run build'"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "credentialless"
