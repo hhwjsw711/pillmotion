@@ -223,5 +223,11 @@
   "toastUploadFailedWithError": "Upload failed: {{error}}",
   "toastVideoStitchingComplete": "Video is ready! It will appear on the page shortly.",
   "toastVideoStitchingFailed": "Video stitching failed.",
-  "videoTagNotSupported": "Your browser does not support the video tag."
+  "videoTagNotSupported": "Your browser does not support the video tag.",
+  "addBackgroundMusic": "Add Background Music",
+  "bgmDialogDescription": "Add background music from a public URL. This will be applied to the entire video.",
+  "savingBgm": "Saving background music...",
+  "bgmSavedSuccessfully": "Background music saved!",
+  "savingBgmFailed": "Failed to save BGM",
+  "save": "Save"
 }

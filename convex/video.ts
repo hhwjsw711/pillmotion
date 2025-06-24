@@ -7,7 +7,7 @@ export const getVideoRenderData = query({
   args: { storyId: v.id("story") },
   async handler(ctx, args) {
     // 1. 验证用户对故事的所有权
-    await verifyStoryOwner(ctx, args.storyId);
+    const { story } = await verifyStoryOwner(ctx, args.storyId);
 
     // 2. 获取故事的所有片段，按顺序排列
     const segments = await ctx.db
@@ -17,7 +17,7 @@ export const getVideoRenderData = query({
       .collect();
 
     // 3. 对每个片段，获取其“已选定”的视频片段的URL
-    const renderList = await Promise.all(
+    const clips = await Promise.all(
       segments.map(async (segment) => {
         // [关键] 检查是否存在 selectedVideoClipVersionId
         if (segment.selectedVideoClipVersionId) {
@@ -45,9 +45,14 @@ export const getVideoRenderData = query({
     );
 
     // 4. 过滤掉所有为 null 的项，确保我们只处理有效的视频数据
-    return renderList.filter(
+    const filteredClips = clips.filter(
       (item): item is NonNullable<typeof item> => item !== null,
     );
+
+    return {
+      clips: filteredClips,
+      bgmUrl: story.bgmUrl ?? null,
+    };
   },
 });
 

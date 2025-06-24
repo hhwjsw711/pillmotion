@@ -38,6 +38,20 @@ export const updateStoryTitle = mutation({
   },
 });
 
+export const updateBgmUrl = mutation({
+  args: {
+    storyId: v.id("story"),
+    bgmUrl: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await verifyStoryOwner(ctx, args.storyId);
+    await ctx.db.patch(args.storyId, {
+      bgmUrl: args.bgmUrl,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 export const listPublic = query({
   handler: async (ctx) => {
     const stories = await ctx.db

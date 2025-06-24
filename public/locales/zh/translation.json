@@ -223,5 +223,11 @@
   "toastUploadFailedWithError": "上传失败：{{error}}",
   "toastVideoStitchingComplete": "视频已就绪！稍后将显示在页面上。",
   "toastVideoStitchingFailed": "视频拼接失败。",
-  "videoTagNotSupported": "您的浏览器不支持 Video 标签。"
+  "videoTagNotSupported": "您的浏览器不支持 Video 标签。",
+  "addBackgroundMusic": "添加背景音乐",
+  "bgmDialogDescription": "通过公开的URL添加背景音乐。此音乐将应用于整个视频。",
+  "savingBgm": "正在保存背景音乐...",
+  "bgmSavedSuccessfully": "背景音乐已保存！",
+  "savingBgmFailed": "背景音乐保存失败",
+  "save": "保存"
 }

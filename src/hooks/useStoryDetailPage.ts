@@ -64,22 +64,30 @@ export function useStoryDetailPage(storyId: Id<"story">) {
     try {
       toast.info(t("toastVideoStitchingStarted"));
       await loadRenderer(); // Safe to call multiple times
-      const renderData = await convex.query(api.video.getVideoRenderData, {
+      const renderConfig = await convex.query(api.video.getVideoRenderData, {
         storyId,
       });
 
-      if (!renderData || renderData.length === 0) {
-        throw new Error("No video clips have been selected for stitching.");
+      if (
+        !renderConfig ||
+        !renderConfig.clips ||
+        renderConfig.clips.length === 0
+      ) {
+        throw new Error(t("toastNoClipsSelectedForStitching"));
       }
-      if (renderData.length !== story?.segmentCount) {
+
+      if (renderConfig.clips.length !== story?.segmentCount) {
         toast.warning(
-          `Only ${renderData.length} out of ${story?.segmentCount} scenes have a selected video clip. The final video will only contain these clips.`,
+          t("toastPartialStitchWarning", {
+            count: renderConfig.clips.length,
+            total: story?.segmentCount,
+          }),
         );
       }
 
-      const stitchedVideoUrl = await renderVideo(renderData);
+      const stitchedVideoUrl = await renderVideo(renderConfig);
       if (!stitchedVideoUrl) {
-        throw new Error("Client-side rendering failed to produce a video.");
+        throw new Error(t("toastRenderFailed"));
       }
 
       toast.info(t("toastUploadingStitchedVideo"));

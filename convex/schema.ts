@@ -220,6 +220,7 @@ const schema = defineSchema({
     stylePrompt: v.optional(v.string()),
     thumbnailUrl: v.optional(v.union(v.string(), v.null())),
     selectedVideoVersionId: v.optional(v.id("videoVersions")),
+    bgmUrl: v.optional(v.string()),
   })
     .index("userId", ["userId"])
     .index("by_user_status", ["userId", "status"])

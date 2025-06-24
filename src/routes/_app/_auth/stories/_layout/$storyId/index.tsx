@@ -17,14 +17,14 @@ import {
   UploadCloud,
   Undo2,
   Video,
-  Scissors, // [NEW] Import Scissors icon
-  CheckCircle2, // [NEW] Import Check icon
+  Scissors,
+  CheckCircle2,
+  Music,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { DndContext, closestCenter, useSensors } from "@dnd-kit/core";
@@ -40,6 +40,10 @@ import { SegmentCardSkeleton } from "./-components/segment-card-skeleton";
 import { useStorySegments } from "@/hooks/useStorySegments";
 import { useStoryDetailPage } from "@/hooks/useStoryDetailPage";
 import { Badge } from "@/ui/badge";
+import { useState, useEffect } from "react";
+import { Input } from "@/ui/input";
+import { Label } from "@/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 
 export const Route = createFileRoute("/_app/_auth/stories/_layout/$storyId/")({
   component: Story,
@@ -123,8 +127,19 @@ function StorySection({
   const { t } = useTranslation();
   const storyId = story._id;
   const updateStatusMutation = useConvexMutation(api.story.updateStatus);
+  const updateBgmUrlMutation = useConvexMutation(api.story.updateBgmUrl);
 
-  // [MODIFIED] Destructure all the new state and handlers from our hook
+  const [isBgmPopoverOpen, setIsBgmPopoverOpen] = useState(false);
+  const [bgmUrl, setBgmUrl] = useState(story.bgmUrl ?? "");
+
+  useEffect(() => {
+    // When the popover is closed, we keep the input state synced with the database.
+    // When it's open, the user is in control, and we don't want to overwrite their input.
+    if (!isBgmPopoverOpen) {
+      setBgmUrl(story.bgmUrl ?? "");
+    }
+  }, [story.bgmUrl, isBgmPopoverOpen]);
+
   const {
     videoVersion,
     isGeneratingClips,
@@ -156,10 +171,70 @@ function StorySection({
     },
   });
 
+  const { mutate: saveBgm, isPending: isSavingBgm } = useMutation({
+    mutationFn: updateBgmUrlMutation,
+    onSuccess: () => {
+      toast.success(t("bgmSavedSuccessfully", "Background music saved!"));
+      setIsBgmPopoverOpen(false);
+    },
+    onError: (err) => {
+      toast.error(t("savingBgmFailed", "Failed to save BGM"), {
+        description: err instanceof Error ? err.message : String(err),
+      });
+    },
+  });
+
+  const handleSaveBgm = () => {
+    saveBgm({
+      storyId,
+      bgmUrl,
+    });
+  };
+
   const videoStatus = videoVersion?.generationStatus;
-  // [MODIFIED] Update the master "is busy" flag
   const isAnythingGenerating =
     story.generationStatus === "processing" || isGeneratingClips || isStitching;
+
+  const SmartPrimaryButton = () => {
+    if (canStitchVideo) {
+      return (
+        <Button
+          variant="default"
+          onClick={handleStitchVideo}
+          disabled={isStitching}
+          title={t("stitchVideoTooltip")}
+        >
+          {isStitching ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Scissors className="mr-2 h-4 w-4" />
+          )}
+          {isStitching
+            ? `${t("stitching")}... ${stitchingProgress}%`
+            : t("stitchVideo")}
+        </Button>
+      );
+    }
+    return (
+      <Button
+        variant="default"
+        onClick={handleGenerateVideo}
+        disabled={isAnythingGenerating || !canGenerateVideo}
+        title={
+          !canGenerateVideo
+            ? t("mustHaveSegmentsToGenerateVideo")
+            : t("generateVideoTooltip")
+        }
+      >
+        {isGeneratingClips ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Clapperboard className="mr-2 h-4 w-4" />
+        )}
+        {t("generateClips")}
+      </Button>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -184,7 +259,6 @@ function StorySection({
             {story.generationStatus === "error" && (
               <Badge variant="destructive">{t("statusGenerationFailed")}</Badge>
             )}
-            {/* [MODIFIED] Badges for video generation and stitching */}
             {isGeneratingClips && (
               <Badge variant="outline" className="flex items-center gap-1.5">
                 <Spinner />
@@ -213,101 +287,115 @@ function StorySection({
               <Badge variant="destructive">{t("videoFailed")}</Badge>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            {/* [MODIFIED] "Generate Clips" Button */}
-            <Button
-              variant="default"
-              onClick={handleGenerateVideo}
-              disabled={isAnythingGenerating || !canGenerateVideo}
-              title={
-                !canGenerateVideo
-                  ? t("mustHaveSegmentsToGenerateVideo")
-                  : t("generateVideoTooltip")
-              }
-            >
-              {isGeneratingClips ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Clapperboard className="mr-2 h-4 w-4" />
-              )}
-              {t("generateClips")}
-            </Button>
 
-            {/* [NEW] Stitch Button */}
-            <Button
-              variant="secondary"
-              onClick={handleStitchVideo}
-              disabled={
-                !canStitchVideo || isGeneratingClips || isStitching
-              }
-              title={
-                canStitchVideo
-                  ? t("stitchVideoTooltip")
-                  : t("clipsNotReadyForStitchingTooltip")
-              }
-            >
-              {isStitching ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Scissors className="mr-2 h-4 w-4" />
-              )}
-              {isStitching
-                ? `${t("stitching")}... ${stitchingProgress}%`
-                : t("stitchVideo")}
-            </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  disabled={isUpdatingStatus || isAnythingGenerating}
+          <div className="flex w-full flex-col items-stretch gap-2 md:w-auto md:flex-row md:items-center">
+            <div className="flex flex-grow items-center gap-2">
+              <Button variant="outline" className="flex-1 md:flex-none" asChild>
+                <Link
+                  to="/stories/$storyId/refine"
+                  params={{ storyId: story._id }}
                 >
-                  {isUpdatingStatus ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <FileText className="mr-2 h-4 w-4" />
+                  <span>{t("editScript")}</span>
+                </Link>
+              </Button>
+              <Button variant="outline" className="flex-1 md:flex-none" asChild>
+                <Link
+                  to="/stories/$storyId/style"
+                  params={{ storyId: story._id }}
+                >
+                  <Palette className="mr-2 h-4 w-4" />
+                  <span>{t("styleSettings")}</span>
+                </Link>
+              </Button>
+
+              <Popover
+                open={isBgmPopoverOpen}
+                onOpenChange={setIsBgmPopoverOpen}
+              >
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="flex-1 md:flex-none"
+                    title={t("addBackgroundMusic")}
+                    disabled={isAnythingGenerating}
+                  >
+                    <Music className="mr-2 h-4 w-4" />
+                    <span>{t("addBackgroundMusic")}</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-96">
+                  <div className="space-y-3 p-2">
+                    <div className="space-y-1">
+                      <h4 className="font-medium">{t("addBackgroundMusic")}</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {t("bgmDialogDescription")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="bgm-url" className="sr-only">
+                        URL
+                      </Label>
+                      <Input
+                        id="bgm-url"
+                        value={bgmUrl}
+                        onChange={(e) => setBgmUrl(e.target.value)}
+                        placeholder="https://..."
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        type="submit"
+                        onClick={handleSaveBgm}
+                        disabled={isSavingBgm}
+                        size="sm"
+                      >
+                        {isSavingBgm && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        {t("save", "Save")}
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <SmartPrimaryButton />
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    disabled={isUpdatingStatus || isAnythingGenerating}
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {story.status !== "published" ? (
+                    <DropdownMenuItem
+                      onSelect={() => updateStatus("published")}
+                    >
+                      <UploadCloud className="mr-2 h-4 w-4" />
+                      <span>{t("publishStory")}</span>
+                    </DropdownMenuItem>
                   ) : (
-                    <Settings className="mr-2 h-4 w-4" />
+                    <DropdownMenuItem onSelect={() => updateStatus("draft")}>
+                      <Undo2 className="mr-2 h-4 w-4" />
+                      <span>{t("unpublishStory")}</span>
+                    </DropdownMenuItem>
                   )}
-                  {t("storySettings")}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem asChild>
-                  <Link
-                    to="/stories/$storyId/refine"
-                    params={{ storyId: story._id }}
-                  >
-                    <FileText className="mr-2 h-4 w-4" />
-                    <span>{t("editScript")}</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link
-                    to="/stories/$storyId/style"
-                    params={{ storyId: story._id }}
-                  >
-                    <Palette className="mr-2 h-4 w-4" />
-                    <span>{t("styleSettings")}</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {story.status !== "published" ? (
-                  <DropdownMenuItem onSelect={() => updateStatus("published")}>
-                    <UploadCloud className="mr-2 h-4 w-4" />
-                    <span>{t("publishStory")}</span>
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem onSelect={() => updateStatus("draft")}>
-                    <Undo2 className="mr-2 h-4 w-4" />
-                    <span>{t("unpublishStory")}</span>
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* [NEW] Show final video when ready */}
       {videoVersion?.storageId && videoVersion.videoUrl && (
         <div className="w-full max-w-3xl mx-auto bg-black rounded-lg shadow-xl overflow-hidden">
           <video

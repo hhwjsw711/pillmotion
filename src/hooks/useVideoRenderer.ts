@@ -11,6 +11,12 @@ export type RenderData = {
   duration?: number;
 };
 
+// [NEW] Update the argument type to include the optional bgmUrl
+export type RenderConfig = {
+  clips: RenderData[];
+  bgmUrl?: string | null;
+};
+
 export const useVideoRenderer = () => {
   const ffmpegRef = useRef(new FFmpeg());
   const [isLoaded, setIsLoaded] = useState(false);
@@ -30,7 +36,9 @@ export const useVideoRenderer = () => {
     setIsLoaded(true);
   };
 
-  const renderVideo = async (renderData: RenderData[]) => {
+  // [MODIFIED] Update function signature to accept RenderConfig
+  const renderVideo = async (config: RenderConfig) => {
+    const { clips, bgmUrl } = config;
     try {
       setIsRendering(true);
       setProgress(0);
@@ -42,20 +50,19 @@ export const useVideoRenderer = () => {
         console.log(message);
       });
 
-      // [最终修复] 基于控制台日志，我们发现 time 是可靠的，而 progress 不可靠。
-      // 我们将手动计算总时长，并使用 time 来计算准确的进度。
-      const totalDuration = renderData.length * 5;
-      
+      // [MODIFIED] Calculate total duration from clips
+      const totalDuration = clips.length * 5;
+
       ffmpeg.on("progress", (p) => {
-        const timeInSeconds = p.time / 1_000_000; // 将微秒转换为秒
+        const timeInSeconds = p.time / 1_000_000;
         const progressRatio = timeInSeconds / totalDuration;
         const safeProgress = Math.max(0, Math.min(1, progressRatio || 0));
         setProgress(Math.round(safeProgress * 100));
       });
 
       let filelist = "";
-      for (let i = 0; i < renderData.length; i++) {
-        const item = renderData[i];
+      for (let i = 0; i < clips.length; i++) {
+        const item = clips[i];
         if (!item) continue;
         const filename = `input${String(i).padStart(3, "0")}.mp4`;
         await ffmpeg.writeFile(filename, await fetchFile(item.url));
@@ -64,11 +71,43 @@ export const useVideoRenderer = () => {
 
       await ffmpeg.writeFile("filelist.txt", filelist);
 
-      await ffmpeg.exec([
-        "-f", "concat", "-safe", "0", "-i", "filelist.txt",
-        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
+      // [NEW] Handle BGM if it exists
+      if (bgmUrl) {
+        await ffmpeg.writeFile("bgm.mp3", await fetchFile(bgmUrl));
+      }
+
+      // [MODIFIED] Update ffmpeg command to include BGM
+      const ffmpegCommand = [
+        // Video inputs
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        "filelist.txt",
+      ];
+
+      if (bgmUrl) {
+        // Audio input
+        ffmpegCommand.push("-i", "bgm.mp3");
+        // Use the shortest input as the stream duration
+        ffmpegCommand.push("-shortest");
+      }
+
+      // Output settings
+      ffmpegCommand.push(
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-pix_fmt",
+        "yuv420p",
+        "-r",
+        "30",
         "output.mp4",
-      ]);
+      );
+
+      await ffmpeg.exec(ffmpegCommand);
 
       const data = await ffmpeg.readFile("output.mp4");
       const url = URL.createObjectURL(
