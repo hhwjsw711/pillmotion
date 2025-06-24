@@ -12,6 +12,7 @@ import { useForm } from "@tanstack/react-form";
 import { zodValidator } from "@tanstack/zod-form-adapter";
 import * as validators from "@/utils/validators";
 import { useSignOut } from "@/utils/misc";
+import { Id } from "~/convex/_generated/dataModel";
 
 export const Route = createFileRoute("/_app/_auth/dashboard/_layout/settings/")(
   {
@@ -46,9 +47,9 @@ export default function DashboardSettings() {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
+      const { storageId } = uploaded[0].response as { storageId: Id<"_storage"> };
       await updateUserImage({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        imageId: (uploaded[0].response as any).storageId,
+        imageId: storageId,
       });
     },
   });

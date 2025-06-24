@@ -104,6 +104,9 @@
   "regenerateTitle": "Regenerate from Prompt",
   "regenerateDescription": "Create a completely new image based on a detailed description. This will not use the current image.",
   "promptLabel": "Prompt",
+  "characterLabel": "Character (Optional)",
+  "characterSelectPlaceholder": "Select a character...",
+  "noCharacter": "None (Default)",
   "promptPlaceholder": "Enter a detailed prompt (in English)...",
   "buttonGenerating": "Generating...",
   "buttonGenerateNewVersion": "Generate Image",
@@ -229,5 +232,69 @@
   "savingBgm": "Saving background music...",
   "bgmSavedSuccessfully": "Background music saved!",
   "savingBgmFailed": "Failed to save BGM",
-  "save": "Save"
+  "save": "Save",
+  "characters": {
+    "title": "Characters",
+    "empty": {
+      "title": "You have no characters yet",
+      "description": "Create your first character to ensure visual consistency across your stories."
+    },
+    "buttons": {
+      "new": "New Character",
+      "createFirst": "Create First Character",
+      "createAction": "Create Character",
+      "delete": "Delete",
+      "deleteAction": "Delete",
+      "deleteConfirm": "Confirm Delete?",
+      "cancel": "Cancel"
+    },
+    "dialog": {
+      "createTitle": "Create a New Character",
+      "createDescription": "Provide training data to create a consistent character. This process may take 15-30 minutes.",
+      "deleteTitle": "Delete this character?",
+      "deleteDescription": "This will permanently delete the character and all associated training data. This action cannot be undone."
+    },
+    "form": {
+      "name": "Character Name",
+      "namePlaceholder": "e.g., Captain Eva, the space pirate",
+      "images": "Training Images",
+      "imagesHint": "The first image will be used as the cover image.",
+      "cover": "Cover",
+      "error": {
+        "nameRequired": "Character name is required.",
+        "filesRequired": "Please select 10 to 20 images.",
+        "fileCount": "Please upload between {{min}} and {{max}} images.",
+        "onlyImages": "Only image files (JPEG, PNG, WEBP) are allowed.",
+        "maxSize": "Total file size cannot exceed {{size}}."
+      }
+    },
+    "guide": {
+      "title": "Image Guidelines for Best Results",
+      "rule1": "Upload between {{min}} and {{max}} images.",
+      "rule2": "Variety is key. Include images with:",
+      "rule2_1": "Different angles (close-ups, full body shots)",
+      "rule2_2": "Various facial expressions",
+      "rule2_3": "Different clothing and backgrounds",
+      "rule3": "Ensure the character is the main subject in most photos.",
+      "rule4": "High resolution images work best.",
+      "rule5": "Avoid images with heavy filters, text, or multiple people.",
+      "rule6": "The AI will learn the visual style from these images.",
+      "rule7": "Total upload size must not exceed {{size}}."
+    },
+    "status": {
+      "pending": "Pending",
+      "training": "Training",
+      "ready": "Ready",
+      "failed": "Failed"
+    },
+    "toast": {
+      "uploading": "Preparing and uploading files...",
+      "uploadError": "File upload failed. Please try again.",
+      "createInProgress": "Files uploaded. Character creation is in progress...",
+      "createSuccess": "Character successfully created! Training has started.",
+      "createError": "Failed to create character.",
+      "deleteSuccess": "Character deleted.",
+      "deleteError": "Failed to delete character."
+    }
+  }
 }

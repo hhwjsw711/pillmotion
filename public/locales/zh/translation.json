@@ -104,6 +104,9 @@
   "regenerateTitle": "从提示词重新生成",
   "regenerateDescription": "根据下方的提示词，创作一张全新的图片。",
   "promptLabel": "提示词",
+  "characterLabel": "选择角色 (可选)",
+  "characterSelectPlaceholder": "选择一个角色...",
+  "noCharacter": "无 (默认模型)",
   "promptPlaceholder": "请输入详细的英文提示词...",
   "buttonGenerating": "正在生成...",
   "buttonGenerateNewVersion": "生成新图片",
@@ -229,5 +232,69 @@
   "savingBgm": "正在保存背景音乐...",
   "bgmSavedSuccessfully": "背景音乐已保存！",
   "savingBgmFailed": "背景音乐保存失败",
-  "save": "保存"
+  "save": "保存",
+  "characters": {
+    "title": "角色库",
+    "empty": {
+      "title": "您还没有任何角色",
+      "description": "创建您的第一个角色，以确保故事中视觉形象的一致性。"
+    },
+    "buttons": {
+      "new": "新建角色",
+      "createFirst": "创建您的第一个角色",
+      "createAction": "创建角色",
+      "delete": "删除",
+      "deleteAction": "删除",
+      "deleteConfirm": "确认删除？",
+      "cancel": "取消"
+    },
+    "dialog": {
+      "createTitle": "创建新角色",
+      "createDescription": "提供训练数据以创建一个形象统一的角色。此过程可能需要 15-30 分钟。",
+      "deleteTitle": "要删除这个角色吗？",
+      "deleteDescription": "此操作将永久删除该角色及其所有关联的训练数据，且无法撤销。"
+    },
+    "form": {
+      "name": "角色名称",
+      "namePlaceholder": "例如：太空海盗，伊娃船长",
+      "images": "训练图片",
+      "imagesHint": "第一张图片将作为封面图。",
+      "cover": "封面",
+      "error": {
+        "nameRequired": "请输入角色名称。",
+        "filesRequired": "请选择 10 到 20 张图片。",
+        "fileCount": "请上传 {{min}} 到 {{max}} 张图片。",
+        "onlyImages": "只允许上传图片文件 (JPEG, PNG, WEBP)。",
+        "maxSize": "文件总大小不能超过 {{size}}。"
+      }
+    },
+    "guide": {
+      "title": "图片指南 (用于获取最佳效果)",
+      "rule1": "上传 {{min}} 到 {{max}} 张图片。",
+      "rule2": "多样性是关键，请包含以下类型的图片：",
+      "rule2_1": "不同角度 (特写、半身、全身照)",
+      "rule2_2": "多种面部表情",
+      "rule2_3": "不同的服装和背景",
+      "rule3": "确保在大多数照片中，角色都是清晰的主体。",
+      "rule4": "高分辨率的图片效果最好。",
+      "rule5": "避免使用带有浓重滤镜、文字或包含多人的图片。",
+      "rule6": "AI 将从这些图片中学习角色的视觉风格。",
+      "rule7": "上传文件总大小不能超过 {{size}}。"
+    },
+    "status": {
+      "pending": "等待中",
+      "training": "训练中",
+      "ready": "已就绪",
+      "failed": "失败"
+    },
+    "toast": {
+      "uploading": "正在准备和上传文件...",
+      "uploadError": "文件上传失败，请重试。",
+      "createInProgress": "文件上传成功，正在创建角色...",
+      "createSuccess": "角色创建成功！训练已开始。",
+      "createError": "创建角色失败。",
+      "deleteSuccess": "角色已删除。",
+      "deleteError": "删除角色失败。"
+    }
+  }
 }

@@ -10,6 +10,7 @@
 
 import type * as app from "../app.js";
 import type * as auth from "../auth.js";
+import type * as characters from "../characters.js";
 import type * as chat from "../chat.js";
 import type * as credits from "../credits.js";
 import type * as email_index from "../email/index.js";
@@ -26,6 +27,7 @@ import type * as otp_ResendOTP from "../otp/ResendOTP.js";
 import type * as otp_VerificationCodeEmail from "../otp/VerificationCodeEmail.js";
 import type * as prosemirror from "../prosemirror.js";
 import type * as replicate from "../replicate.js";
+import type * as replicateWebhook from "../replicateWebhook.js";
 import type * as segments from "../segments.js";
 import type * as story from "../story.js";
 import type * as streaming from "../streaming.js";
@@ -50,6 +52,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   app: typeof app;
   auth: typeof auth;
+  characters: typeof characters;
   chat: typeof chat;
   credits: typeof credits;
   "email/index": typeof email_index;
@@ -66,6 +69,7 @@ declare const fullApi: ApiFromModules<{
   "otp/VerificationCodeEmail": typeof otp_VerificationCodeEmail;
   prosemirror: typeof prosemirror;
   replicate: typeof replicate;
+  replicateWebhook: typeof replicateWebhook;
   segments: typeof segments;
   story: typeof story;
   streaming: typeof streaming;

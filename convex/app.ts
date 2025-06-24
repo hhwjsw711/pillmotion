@@ -1,5 +1,5 @@
 import { internal } from "@cvx/_generated/api";
-import { mutation, query } from "@cvx/_generated/server";
+import { internalQuery, mutation, query } from "@cvx/_generated/server";
 import { auth } from "@cvx/auth";
 import { currencyValidator, PLANS } from "@cvx/schema";
 import { asyncMap } from "convex-helpers";
@@ -179,5 +179,13 @@ export const deleteCurrentUserAccount = mutation({
       }
       await ctx.db.delete(authAccount._id);
     });
+  },
+});
+
+// [新功能] 添加这个内部查询，供服务器端的 action 使用
+export const get = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.userId);
   },
 });

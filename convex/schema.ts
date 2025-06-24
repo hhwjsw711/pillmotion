@@ -7,11 +7,13 @@ export const CREDIT_COSTS = {
   CHAT_COMPLETION: 1,
   IMAGE_GENERATION: 10,
   VIDEO_CLIP_GENERATION: 100,
+  LORA_TRAINING: 500, // <-- 添加此行
 } as const;
 export const creditCostValidator = v.union(
   v.literal(CREDIT_COSTS.CHAT_COMPLETION),
   v.literal(CREDIT_COSTS.IMAGE_GENERATION),
   v.literal(CREDIT_COSTS.VIDEO_CLIP_GENERATION),
+  v.literal(CREDIT_COSTS.LORA_TRAINING), // <-- 添加此行
 );
 export type CreditCost = Infer<typeof creditCostValidator>;
 
@@ -286,6 +288,23 @@ const schema = defineSchema({
       dimensions: 768,
       filterFields: ["userIdString"],
     }),
+  characters: defineTable({
+    userId: v.id("users"),
+    name: v.string(), // 用户指定的角色名
+    status: v.union(
+      v.literal("pending"), // 等待发起训练
+      v.literal("training"), // Replicate 训练中
+      v.literal("ready"), // 训练完成，可用
+      v.literal("failed"), // 训练失败
+    ),
+    replicateTrainingId: v.optional(v.string()), // Replicate 返回的训练任务 ID
+    replicateModelDestination: v.optional(v.string()), // Replicate 上的模型目标地址
+    replicateModelVersion: v.optional(v.string()), // 训练成功后的模型版本
+    triggerWord: v.optional(v.string()), // 用于激活模型的触发词
+    failureReason: v.optional(v.string()), // 记录训练失败的原因
+    coverImageId: v.id("_storage"), // 封面图，用于UI显示
+    trainingDataZipId: v.id("_storage"), // 包含所有训练图片的zip文件
+  }).index("by_user", ["userId"]),
 });
 
 export default schema;

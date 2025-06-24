@@ -12,6 +12,7 @@ import {
   Video,
   Clapperboard,
   Library,
+  Users,
 } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
@@ -29,6 +30,16 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useMediaLibraryStore } from "@/hooks/useMediaLibrary";
 import { SearchResult } from "@/hooks/useMediaLibrary";
+import { useQuery } from "@tanstack/react-query";
+import { convexQuery } from "@convex-dev/react-query";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/select";
+import { api } from "@cvx/_generated/api";
 
 export const Route = createFileRoute(
   "/_app/_auth/stories/_layout/$storyId/segments/$segmentId/",
@@ -300,6 +311,13 @@ export default function SegmentEditor() {
   } = useSegmentEditor(segmentId as Id<"segments">);
 
   const [textToVideoPrompt, setTextToVideoPrompt] = useState("");
+  const [selectedCharacterId, setSelectedCharacterId] = useState<
+    Id<"characters"> | "none"
+  >("none");
+  const { data: readyCharacters } = useQuery(
+    convexQuery(api.characters.getReady, {}),
+  );
+
   const { open: openMediaLibrary, setOnSelect } = useMediaLibraryStore();
 
   if (isLoading) {
@@ -319,6 +337,8 @@ export default function SegmentEditor() {
     regenerateImageMutation.mutate({
       segmentId: segment._id,
       prompt: promptText,
+      characterId:
+        selectedCharacterId === "none" ? undefined : selectedCharacterId,
     });
   };
 
@@ -500,6 +520,48 @@ export default function SegmentEditor() {
                   </div>
                   <div className="grid w-full gap-2">
                     <Label htmlFor="prompt-input">{t("promptLabel")}</Label>
+                    <div className="space-y-2">
+                      <Label>
+                        {t("characterLabel", "Character (Optional)")}
+                      </Label>
+                      <Select
+                        value={selectedCharacterId}
+                        onValueChange={(value) =>
+                          setSelectedCharacterId(value as any)
+                        }
+                        disabled={isAnyMutationPending}
+                      >
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={t(
+                              "characterSelectPlaceholder",
+                              "Select a character...",
+                            )}
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">
+                            {t("noCharacter", "None (Default)")}
+                          </SelectItem>
+                          {readyCharacters?.map((char) => (
+                            <SelectItem key={char._id} value={char._id}>
+                              <div className="flex items-center gap-2">
+                                {char.coverImageUrl ? (
+                                  <img
+                                    src={char.coverImageUrl}
+                                    className="h-6 w-6 rounded-full object-cover"
+                                    alt={char.name}
+                                  />
+                                ) : (
+                                  <Users className="h-6 w-6 p-1 rounded-full bg-muted" />
+                                )}
+                                <span>{char.name}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <Textarea
                       id="prompt-input"
                       placeholder={t("promptPlaceholder")}

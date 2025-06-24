@@ -1,24 +1,24 @@
 import { httpRouter } from "convex/server";
 import { auth } from "./auth";
-import { ActionCtx, httpAction } from "@cvx/_generated/server";
+import { ActionCtx, httpAction } from "./_generated/server";
 import { ERRORS } from "~/errors";
-import { stripe } from "@cvx/stripe";
-import { streamChat } from "@cvx/chat";
-import { STRIPE_WEBHOOK_SECRET } from "@cvx/env";
+import { stripe } from "./stripe";
+import { streamChat } from "./chat";
+import { STRIPE_WEBHOOK_SECRET } from "./env";
 import { z } from "zod";
-import { internal } from "@cvx/_generated/api";
-import { Currency, Interval, PLANS } from "@cvx/schema";
+import { internal } from "./_generated/api";
+import { Currency, Interval, PLANS } from "./schema";
 import {
   sendSubscriptionErrorEmail,
   sendSubscriptionSuccessEmail,
-} from "@cvx/email/templates/subscriptionEmail";
+} from "./email/templates/subscriptionEmail";
 import Stripe from "stripe";
-import { Doc } from "@cvx/_generated/dataModel";
+import { Doc } from "./_generated/dataModel";
 import {
   STRIPE_SMALL_CREDIT_PACK,
   STRIPE_MEDIUM_CREDIT_PACK,
   STRIPE_LARGE_CREDIT_PACK,
-} from "@cvx/env";
+} from "./env";
 
 const http = httpRouter();
 
@@ -238,6 +238,33 @@ const handleCustomerSubscriptionDeleted = async (
   return new Response(null);
 };
 
+// [新功能] Replicate Webhook 处理器
+http.route({
+  path: "/replicate-webhook",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    // 将请求转发到Node.js action进行处理，
+    // 因为它需要`crypto`模块来验证签名。
+    const headers: { [key: string]: string } = {};
+    request.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+
+    try {
+      await ctx.runAction(internal.replicateWebhook.handle, {
+        headers,
+        body: await request.text(),
+        url: request.url,
+      });
+
+      return new Response(null, { status: 200 });
+    } catch (err: any) {
+      console.error("Webhook passthrough error:", err.message);
+      return new Response("Internal Server Error", { status: 500 });
+    }
+  }),
+});
+
 http.route({
   path: "/stripe/webhook",
   method: "POST",
@@ -246,24 +273,12 @@ http.route({
 
     try {
       switch (event.type) {
-        /**
-         * Occurs when a Checkout Session has been successfully completed.
-         */
         case "checkout.session.completed": {
           return handleCheckoutSessionCompleted(ctx, event);
         }
-
-        /**
-         * Occurs when a Stripe subscription has been updated.
-         * E.g. when a user upgrades or downgrades their plan.
-         */
         case "customer.subscription.updated": {
           return handleCustomerSubscriptionUpdated(ctx, event);
         }
-
-        /**
-         * Occurs whenever a customer’s subscription ends.
-         */
         case "customer.subscription.deleted": {
           return handleCustomerSubscriptionDeleted(ctx, event);
         }
@@ -273,12 +288,10 @@ http.route({
         case "checkout.session.completed": {
           return handleCheckoutSessionCompletedError(ctx, event);
         }
-
         case "customer.subscription.updated": {
           return handleCustomerSubscriptionUpdatedError(ctx, event);
         }
       }
-
       throw err;
     }
 

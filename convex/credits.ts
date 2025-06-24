@@ -3,7 +3,7 @@ import { internalMutation } from "./_generated/server";
 import { ERRORS } from "~/errors";
 import { MutationCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
-import { creditCostValidator } from "./schema";
+import { CREDIT_COSTS, creditCostValidator } from "./schema";
 
 export const addCredits = internalMutation({
   args: {
@@ -54,5 +54,18 @@ export const consumeCredits = internalMutation({
   },
   handler: async (ctx, args) => {
     await consumeCreditsHelper(ctx, args.userId, args.cost);
+  },
+});
+
+export const refundTrainingCredits = internalMutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) {
+      throw new ConvexError(`User not found with ID: ${args.userId}`);
+    }
+    await ctx.db.patch(args.userId, {
+      credits: (user.credits ?? 0) + CREDIT_COSTS.LORA_TRAINING,
+    });
   },
 });

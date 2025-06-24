@@ -252,6 +252,7 @@ export const regenerateImage = mutation({
   args: {
     segmentId: v.id("segments"),
     prompt: v.string(),
+    characterId: v.optional(v.id("characters")),
   },
   async handler(ctx, args) {
     const { userId } = await verifySegmentOwner(ctx, args.segmentId);
@@ -268,6 +269,7 @@ export const regenerateImage = mutation({
       {
         segmentId: args.segmentId,
         prompt: args.prompt,
+        characterId: args.characterId,
       },
     );
   },

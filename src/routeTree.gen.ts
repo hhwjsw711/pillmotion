@@ -24,9 +24,11 @@ import { Route as AppAuthStoriesLayoutImport } from './routes/_app/_auth/stories
 import { Route as AppAuthOnboardingLayoutImport } from './routes/_app/_auth/onboarding/_layout'
 import { Route as AppAuthGenerateLayoutImport } from './routes/_app/_auth/generate/_layout'
 import { Route as AppAuthDashboardLayoutImport } from './routes/_app/_auth/dashboard/_layout'
+import { Route as AppAuthCharactersLayoutImport } from './routes/_app/_auth/characters/_layout'
 import { Route as AppAuthStoriesLayoutIndexImport } from './routes/_app/_auth/stories/_layout.index'
 import { Route as AppAuthGenerateLayoutIndexImport } from './routes/_app/_auth/generate/_layout.index'
 import { Route as AppAuthDashboardLayoutIndexImport } from './routes/_app/_auth/dashboard/_layout.index'
+import { Route as AppAuthCharactersLayoutIndexImport } from './routes/_app/_auth/characters/_layout.index'
 import { Route as AppAuthStoriesLayoutStoryIdImport } from './routes/_app/_auth/stories/_layout.$storyId'
 import { Route as AppAuthOnboardingLayoutUsernameImport } from './routes/_app/_auth/onboarding/_layout.username'
 import { Route as AppAuthDashboardLayoutSettingsImport } from './routes/_app/_auth/dashboard/_layout.settings'
@@ -45,6 +47,7 @@ const AppAuthStoriesImport = createFileRoute('/_app/_auth/stories')()
 const AppAuthOnboardingImport = createFileRoute('/_app/_auth/onboarding')()
 const AppAuthGenerateImport = createFileRoute('/_app/_auth/generate')()
 const AppAuthDashboardImport = createFileRoute('/_app/_auth/dashboard')()
+const AppAuthCharactersImport = createFileRoute('/_app/_auth/characters')()
 
 // Create/Update Routes
 
@@ -98,6 +101,11 @@ const AppAuthDashboardRoute = AppAuthDashboardImport.update({
   getParentRoute: () => AppAuthRoute,
 } as any)
 
+const AppAuthCharactersRoute = AppAuthCharactersImport.update({
+  path: '/characters',
+  getParentRoute: () => AppAuthRoute,
+} as any)
+
 const AppLoginLayoutRoute = AppLoginLayoutImport.update({
   id: '/_layout',
   getParentRoute: () => AppLoginRoute,
@@ -128,6 +136,11 @@ const AppAuthDashboardLayoutRoute = AppAuthDashboardLayoutImport.update({
   getParentRoute: () => AppAuthDashboardRoute,
 } as any)
 
+const AppAuthCharactersLayoutRoute = AppAuthCharactersLayoutImport.update({
+  id: '/_layout',
+  getParentRoute: () => AppAuthCharactersRoute,
+} as any)
+
 const AppAuthStoriesLayoutIndexRoute = AppAuthStoriesLayoutIndexImport.update({
   path: '/',
   getParentRoute: () => AppAuthStoriesLayoutRoute,
@@ -144,6 +157,12 @@ const AppAuthDashboardLayoutIndexRoute =
   AppAuthDashboardLayoutIndexImport.update({
     path: '/',
     getParentRoute: () => AppAuthDashboardLayoutRoute,
+  } as any)
+
+const AppAuthCharactersLayoutIndexRoute =
+  AppAuthCharactersLayoutIndexImport.update({
+    path: '/',
+    getParentRoute: () => AppAuthCharactersLayoutRoute,
   } as any)
 
 const AppAuthStoriesLayoutStoryIdRoute =
@@ -259,6 +278,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLoginLayoutImport
       parentRoute: typeof AppLoginRoute
     }
+    '/_app/_auth/characters': {
+      id: '/_app/_auth/characters'
+      path: '/characters'
+      fullPath: '/characters'
+      preLoaderRoute: typeof AppAuthCharactersImport
+      parentRoute: typeof AppAuthImport
+    }
+    '/_app/_auth/characters/_layout': {
+      id: '/_app/_auth/characters/_layout'
+      path: '/characters'
+      fullPath: '/characters'
+      preLoaderRoute: typeof AppAuthCharactersLayoutImport
+      parentRoute: typeof AppAuthCharactersRoute
+    }
     '/_app/_auth/dashboard': {
       id: '/_app/_auth/dashboard'
       path: '/dashboard'
@@ -350,6 +383,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAuthStoriesLayoutStoryIdImport
       parentRoute: typeof AppAuthStoriesLayoutImport
     }
+    '/_app/_auth/characters/_layout/': {
+      id: '/_app/_auth/characters/_layout/'
+      path: '/'
+      fullPath: '/characters/'
+      preLoaderRoute: typeof AppAuthCharactersLayoutIndexImport
+      parentRoute: typeof AppAuthCharactersLayoutImport
+    }
     '/_app/_auth/dashboard/_layout/': {
       id: '/_app/_auth/dashboard/_layout/'
       path: '/'
@@ -422,6 +462,11 @@ export const routeTree = rootRoute.addChildren({
   IndexRoute,
   AppRoute: AppRoute.addChildren({
     AppAuthRoute: AppAuthRoute.addChildren({
+      AppAuthCharactersRoute: AppAuthCharactersRoute.addChildren({
+        AppAuthCharactersLayoutRoute: AppAuthCharactersLayoutRoute.addChildren({
+          AppAuthCharactersLayoutIndexRoute,
+        }),
+      }),
       AppAuthDashboardRoute: AppAuthDashboardRoute.addChildren({
         AppAuthDashboardLayoutRoute: AppAuthDashboardLayoutRoute.addChildren({
           AppAuthDashboardLayoutCheckoutRoute,
@@ -500,6 +545,7 @@ export const routeTree = rootRoute.addChildren({
       "filePath": "_app/_auth.tsx",
       "parent": "/_app",
       "children": [
+        "/_app/_auth/characters",
         "/_app/_auth/dashboard",
         "/_app/_auth/generate",
         "/_app/_auth/onboarding",
@@ -518,6 +564,20 @@ export const routeTree = rootRoute.addChildren({
       "parent": "/_app/login",
       "children": [
         "/_app/login/_layout/"
+      ]
+    },
+    "/_app/_auth/characters": {
+      "filePath": "_app/_auth/characters",
+      "parent": "/_app/_auth",
+      "children": [
+        "/_app/_auth/characters/_layout"
+      ]
+    },
+    "/_app/_auth/characters/_layout": {
+      "filePath": "_app/_auth/characters/_layout.tsx",
+      "parent": "/_app/_auth/characters",
+      "children": [
+        "/_app/_auth/characters/_layout/"
       ]
     },
     "/_app/_auth/dashboard": {
@@ -608,6 +668,10 @@ export const routeTree = rootRoute.addChildren({
         "/_app/_auth/stories/_layout/$storyId/",
         "/_app/_auth/stories/_layout/$storyId/segments/$segmentId/"
       ]
+    },
+    "/_app/_auth/characters/_layout/": {
+      "filePath": "_app/_auth/characters/_layout.index.tsx",
+      "parent": "/_app/_auth/characters/_layout"
     },
     "/_app/_auth/dashboard/_layout/": {
       "filePath": "_app/_auth/dashboard/_layout.index.tsx",
