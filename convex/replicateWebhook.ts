@@ -76,7 +76,7 @@ export const handle = internalAction({
 
       console.log(`Webhook for ${characterId}: ${status}`);
 
-      // [FIX] Use RESEND_API_KEY for consistency
+      // [FIX] Use AUTH_RESEND_KEY for consistency
       const resendApiKey = process.env.AUTH_RESEND_KEY;
       const user = await ctx.runQuery(internal.app.get, {
         userId: character.userId,

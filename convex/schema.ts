@@ -103,7 +103,6 @@ export const storyVideoGenerationStatusValidator = v.union(
   v.literal("idle"),
   v.literal("pending"),
   v.literal("generating_clips"),
-  v.literal("merging_clips"),
   v.literal("generated"),
   v.literal("error"),
 );

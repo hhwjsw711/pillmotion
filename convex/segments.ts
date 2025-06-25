@@ -231,11 +231,14 @@ export const selectVideoClipVersion = mutation({
         storageId: originalVersion.storageId,
         // [FIX] Also clone the poster frame ID to ensure it's visible in the UI
         posterStorageId: originalVersion.posterStorageId,
+        // [BUG FIX] Also clone the last frame poster ID for transitions
+        lastFramePosterStorageId: originalVersion.lastFramePosterStorageId,
         embedding: originalVersion.embedding,
         // Set new segment-specific data for the clone
         segmentId: segmentId, // Link to the current segment
         generationStatus: "generated", // It's already generated
-        processingStatus: "idle",
+        // [BUG FIX] Cloned assets are already processed.
+        processingStatus: "completed",
       });
       versionToSelectId = newVersionId;
     }

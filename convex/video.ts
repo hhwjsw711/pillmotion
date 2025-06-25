@@ -20,7 +20,7 @@ async function resolveSourceToImageVersion(
     segmentId: Id<"segments">;
     frameType: "start" | "end"; // [ADD]
   },
-): Promise<Id<"imageVersions">> {
+): Promise<{ imageVersionId: Id<"imageVersions">; wasCreated: boolean }> {
   const { sourceId, userId, segmentId, frameType } = args; // [CHANGE]
 
   // Fetch the document without assuming its type.
@@ -32,7 +32,10 @@ async function resolveSourceToImageVersion(
 
   // Check if it's an imageVersion by looking for a unique field.
   if ("image" in doc) {
-    return doc._id as Id<"imageVersions">; // It's already an image.
+    return {
+      imageVersionId: doc._id as Id<"imageVersions">,
+      wasCreated: false,
+    }; // It's already an image.
   }
 
   // If not, it must be a videoClipVersion.
@@ -54,7 +57,7 @@ async function resolveSourceToImageVersion(
       previewImage: imageToUse, // [CHANGE]
       source: "frame_extracted",
     });
-    return newImageVersionId;
+    return { imageVersionId: newImageVersionId, wasCreated: true };
   }
 
   // If it's a video without a poster, we can't proceed.
@@ -76,21 +79,33 @@ export const generateTransition = mutation({
   handler: async (ctx, args) => {
     const { userId } = await verifySegmentOwner(ctx, args.segmentId);
 
-    // [CHANGE] Pass 'frameType' to the helper
-    const startImageId = await resolveSourceToImageVersion(ctx.db, {
+    // [CHANGE] Pass 'frameType' to the helper and get creation status
+    const startImage = await resolveSourceToImageVersion(ctx.db, {
       sourceId: args.startFrameSourceId,
       userId: userId,
       segmentId: args.segmentId,
       frameType: "start",
     });
 
-    // [CHANGE] Pass 'frameType' to the helper
-    const endImageId = await resolveSourceToImageVersion(ctx.db, {
+    // [CHANGE] Pass 'frameType' to the helper and get creation status
+    const endImage = await resolveSourceToImageVersion(ctx.db, {
       sourceId: args.endFrameSourceId,
       userId: userId,
       segmentId: args.segmentId,
       frameType: "end",
     });
+
+    // [BUG FIX] Schedule embedding generation for newly created frame images
+    if (startImage.wasCreated) {
+      await ctx.scheduler.runAfter(0, internal.media.generateEmbeddingForImage, {
+        imageVersionId: startImage.imageVersionId,
+      });
+    }
+    if (endImage.wasCreated) {
+      await ctx.scheduler.runAfter(0, internal.media.generateEmbeddingForImage, {
+        imageVersionId: endImage.imageVersionId,
+      });
+    }
 
     const newVideoClipVersionId = await ctx.db.insert("videoClipVersions", {
       segmentId: args.segmentId,
@@ -98,8 +113,8 @@ export const generateTransition = mutation({
       userIdString: userId,
       context: {
         type: "transition",
-        startImageId: startImageId,
-        endImageId: endImageId,
+        startImageId: startImage.imageVersionId,
+        endImageId: endImage.imageVersionId,
         prompt: args.prompt,
       },
       generationStatus: "pending",
