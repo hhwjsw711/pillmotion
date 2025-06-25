@@ -1,31 +1,145 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import { verifyStoryOwner } from "./lib/auth";
+import { verifySegmentOwner, verifyStoryOwner } from "./lib/auth";
 import { ConvexError } from "convex/values";
+import { internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
+import type { DatabaseWriter } from "./_generated/server";
+
+/**
+ * [HELPER FUNCTION - ROBUST VERSION]
+ * This function is now more robust. It fetches the document first and checks
+ * its properties to determine if it's an image or video, rather than relying on
+ * TypeScript casting. This makes the backend more resilient to client-side errors.
+ */
+async function resolveSourceToImageVersion(
+  db: DatabaseWriter,
+  args: {
+    sourceId: Id<"imageVersions"> | Id<"videoClipVersions">;
+    userId: Id<"users">;
+    segmentId: Id<"segments">;
+    frameType: "start" | "end"; // [ADD]
+  },
+): Promise<Id<"imageVersions">> {
+  const { sourceId, userId, segmentId, frameType } = args; // [CHANGE]
+
+  // Fetch the document without assuming its type.
+  const doc = await db.get(sourceId);
+
+  if (!doc) {
+    throw new ConvexError(`Source asset not found for ID: ${sourceId}`);
+  }
+
+  // Check if it's an imageVersion by looking for a unique field.
+  if ("image" in doc) {
+    return doc._id as Id<"imageVersions">; // It's already an image.
+  }
+
+  // If not, it must be a videoClipVersion.
+  if ("posterStorageId" in doc && doc.posterStorageId) {
+    // [CHANGE] This is the core logic fix.
+    // For a 'start' frame, we MUST use the video's LAST frame.
+    // For an 'end' frame, we use the video's FIRST frame (the poster).
+    const imageToUse =
+      frameType === "start" && doc.lastFramePosterStorageId
+        ? doc.lastFramePosterStorageId
+        : doc.posterStorageId;
+
+    // Create a new imageVersion from the video's poster.
+    const newImageVersionId = await db.insert("imageVersions", {
+      userId: userId,
+      userIdString: userId,
+      segmentId: segmentId,
+      image: imageToUse, // [CHANGE]
+      previewImage: imageToUse, // [CHANGE]
+      source: "frame_extracted",
+    });
+    return newImageVersionId;
+  }
+
+  // If it's a video without a poster, we can't proceed.
+  throw new ConvexError(
+    `Video clip ${doc._id} does not have a poster image to use for transition.`,
+  );
+}
+
+export const generateTransition = mutation({
+  args: {
+    segmentId: v.id("segments"),
+    startFrameSourceId: v.union(
+      v.id("imageVersions"),
+      v.id("videoClipVersions"),
+    ),
+    endFrameSourceId: v.union(v.id("imageVersions"), v.id("videoClipVersions")),
+    prompt: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { userId } = await verifySegmentOwner(ctx, args.segmentId);
+
+    // [CHANGE] Pass 'frameType' to the helper
+    const startImageId = await resolveSourceToImageVersion(ctx.db, {
+      sourceId: args.startFrameSourceId,
+      userId: userId,
+      segmentId: args.segmentId,
+      frameType: "start",
+    });
+
+    // [CHANGE] Pass 'frameType' to the helper
+    const endImageId = await resolveSourceToImageVersion(ctx.db, {
+      sourceId: args.endFrameSourceId,
+      userId: userId,
+      segmentId: args.segmentId,
+      frameType: "end",
+    });
+
+    const newVideoClipVersionId = await ctx.db.insert("videoClipVersions", {
+      segmentId: args.segmentId,
+      userId: userId,
+      userIdString: userId,
+      context: {
+        type: "transition",
+        startImageId: startImageId,
+        endImageId: endImageId,
+        prompt: args.prompt,
+      },
+      generationStatus: "pending",
+      processingStatus: "idle",
+    });
+
+    await ctx.scheduler.runAfter(0, internal.replicate.generateTransitionClip, {
+      userId: userId,
+      videoClipVersionId: newVideoClipVersionId,
+    });
+
+    return newVideoClipVersionId;
+  },
+});
+
+export const getVideoClipVersion = internalQuery({
+  args: { clipId: v.id("videoClipVersions") },
+  handler: async (ctx, { clipId }) => {
+    return await ctx.db.get(clipId);
+  },
+});
 
 export const getVideoRenderData = query({
   args: { storyId: v.id("story") },
   async handler(ctx, args) {
-    // 1. 验证用户对故事的所有权
     const { story } = await verifyStoryOwner(ctx, args.storyId);
 
-    // 2. 获取故事的所有片段，按顺序排列
     const segments = await ctx.db
       .query("segments")
       .withIndex("by_story_order", (q) => q.eq("storyId", args.storyId))
       .order("asc")
       .collect();
 
-    // 3. 对每个片段，获取其“已选定”的视频片段的URL
     const clips = await Promise.all(
       segments.map(async (segment) => {
-        // [关键] 检查是否存在 selectedVideoClipVersionId
         if (segment.selectedVideoClipVersionId) {
           const videoClipVersion = await ctx.db.get(
             segment.selectedVideoClipVersionId,
           );
 
-          // [关键] 从 videoClipVersions 记录中获取 storageId
           if (videoClipVersion?.storageId) {
             const videoUrl = await ctx.storage.getUrl(
               videoClipVersion.storageId,
@@ -38,13 +152,10 @@ export const getVideoRenderData = query({
             }
           }
         }
-
-        // 如果一个片段没有选定的视频，它将被跳过，不会包含在最终的渲染中
         return null;
       }),
     );
 
-    // 4. 过滤掉所有为 null 的项，确保我们只处理有效的视频数据
     const filteredClips = clips.filter(
       (item): item is NonNullable<typeof item> => item !== null,
     );
@@ -56,7 +167,6 @@ export const getVideoRenderData = query({
   },
 });
 
-// [NEW] Mutation to save the final stitched video, triggered by the user from the client.
 export const saveStitchedVideo = mutation({
   args: {
     videoVersionId: v.id("videoVersions"),
@@ -68,11 +178,8 @@ export const saveStitchedVideo = mutation({
       throw new ConvexError("Video version not found.");
     }
 
-    // Verify ownership before patching
     await verifyStoryOwner(ctx, videoVersion.storyId);
 
-    // Update the record with the final video's storageId.
-    // The generationStatus remains 'generated'. We are just adding the final asset.
     await ctx.db.patch(videoVersionId, {
       storageId: storageId,
       statusMessage: "Video successfully stitched and saved by user.",

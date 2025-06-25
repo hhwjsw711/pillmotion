@@ -74,6 +74,39 @@ async function generateVideoPrompt(
   }
 }
 
+async function generateTransitionPrompt(
+  startPrompt: string | undefined,
+  endPrompt: string | undefined,
+  transitionInstruction: string | undefined,
+) {
+  const systemPrompt = `You are an expert film director and cinematographer. Your task is to convert a start scene, an end scene, and a transition instruction into a single, rich, and actionable prompt for an image-to-video AI model. The final prompt must be in ENGLISH and should be a single, comma-separated string of descriptive phrases. You will be given the prompt for the start image in <StartPrompt>, the prompt for the end image in <EndPrompt>, and a transition instruction in <TransitionInstruction>. **Your prompt MUST describe a continuous motion** that logically connects the start and end visuals. The AI will see the start image, so your prompt should focus on the *action of transitioning*. **Example 1:** - Input: <StartPrompt>A knight stands in front of a castle</StartPrompt> <EndPrompt>The knight is inside the throne room</EndPrompt> <TransitionInstruction>dolly zoom</TransitionInstruction> - Your Output: A fast dolly zoom effect, the camera moves rapidly through the castle gate, the scene morphs from the castle exterior to the grand throne room where the knight now stands. **Example 2:** - Input: <StartPrompt>A single red apple on a table</StartPrompt> <EndPrompt>A whole apple pie on the table</EndPrompt> <TransitionInstruction>A quick blur</TransitionInstruction> - Your Output: A quick blur transition, the red apple spins and dissolves into a freshly baked apple pie in the same spot, motion blur, time-lapse effect.`;
+  const userContent = `<StartPrompt>${
+    startPrompt ?? "the first scene"
+  }</StartPrompt>\n<EndPrompt>${
+    endPrompt ?? "the second scene"
+  }</EndPrompt>\n<TransitionInstruction>${
+    transitionInstruction ?? "A smooth transition"
+  }</TransitionInstruction>`;
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      temperature: 0.7,
+    });
+    return (
+      completion.choices[0]?.message?.content ??
+      transitionInstruction ??
+      "A smooth video transition"
+    );
+  } catch (error) {
+    console.error("Error generating transition prompt:", error);
+    return transitionInstruction ?? "A smooth video transition";
+  }
+}
+
 async function getEditingPrompt(
   originalPrompt: string | undefined,
   newInstruction: string,
@@ -496,10 +529,14 @@ export const generateImageToVideoClip = internalAction({
         segmentId: args.segmentId,
         videoClipVersionId: videoClipVersionId,
       });
-      await ctx.scheduler.runAfter(0, internal.videoProcessing.generatePoster, {
-        storageId: videoStorageId,
-        clipId: videoClipVersionId,
-      });
+      // [FIXED] Call with the correct argument name: `clipId`
+      await ctx.scheduler.runAfter(
+        0,
+        internal.videoProcessing.generateVideoThumbnails,
+        {
+          clipId: videoClipVersionId,
+        },
+      );
       await ctx.scheduler.runAfter(
         0,
         internal.media.generateEmbeddingForVideo,
@@ -625,10 +662,14 @@ export const generateTextToVideoClip = internalAction({
         segmentId: args.segmentId,
         videoClipVersionId: videoClipVersionId,
       });
-      await ctx.scheduler.runAfter(0, internal.videoProcessing.generatePoster, {
-        storageId: videoStorageId,
-        clipId: videoClipVersionId,
-      });
+      // [FIXED] Call with the correct argument name: `clipId`
+      await ctx.scheduler.runAfter(
+        0,
+        internal.videoProcessing.generateVideoThumbnails,
+        {
+          clipId: videoClipVersionId,
+        },
+      );
       await ctx.scheduler.runAfter(
         0,
         internal.media.generateEmbeddingForVideo,
@@ -654,6 +695,120 @@ export const generateTextToVideoClip = internalAction({
         isGenerating: false,
         error: error.message,
       });
+      return { success: false, error: error.message };
+    }
+  },
+});
+
+export const generateTransitionClip = internalAction({
+  args: {
+    userId: v.id("users"),
+    videoClipVersionId: v.id("videoClipVersions"),
+  },
+  handler: async (ctx, args) => {
+    const videoClipVersionId = args.videoClipVersionId;
+    try {
+      const videoClipVersion = await ctx.runQuery(
+        internal.segments.getVideoClipVersionInternal,
+        { versionId: videoClipVersionId }, // [FIX] Correct argument name
+      );
+      if (!videoClipVersion) {
+        throw new Error(`VideoClipVersion ${videoClipVersionId} not found.`);
+      }
+      if (videoClipVersion.context.type !== "transition") {
+        throw new Error(`VideoClipVersion is not a transition type.`);
+      }
+      const {
+        startImageId,
+        endImageId,
+        prompt: transitionInstruction,
+      } = videoClipVersion.context;
+
+      const startImageData = await ctx.runQuery(
+        internal.segments.getImageToVideoGenerationData,
+        {
+          segmentId: videoClipVersion.segmentId,
+          imageVersionId: startImageId,
+        },
+      );
+      const endImageVersion = await ctx.runQuery(
+        internal.imageVersions.getVersionInternal,
+        { versionId: endImageId },
+      );
+      if (!endImageVersion) throw new Error("End image version not found.");
+
+      const endImageUrl = await ctx.storage.getUrl(endImageVersion.image);
+      if (!endImageUrl) {
+        throw new Error(`URL for end image ${endImageId} not found.`);
+      }
+
+      const finalPrompt = await generateTransitionPrompt(
+        startImageData.imagePrompt,
+        endImageVersion.prompt,
+        transitionInstruction,
+      );
+
+      // [REPLACED] Use the new model with start and end frames
+      const output = await replicate.run("kwaivgi/kling-v1.6-pro", {
+        input: {
+          prompt: finalPrompt,
+          start_image: startImageData.imageUrl,
+          end_image: endImageUrl,
+          duration: 5,
+          negative_prompt: "low quality, bad quality, blurry, cgi, fake",
+        },
+      });
+
+      const videoUrl = Array.isArray(output) ? output[0] : String(output);
+      if (!videoUrl || typeof videoUrl !== "string") {
+        console.error("Replicate API response:", output);
+        throw new Error("Replicate did not return a valid video URL.");
+      }
+      const videoResponse = await fetch(videoUrl);
+      if (!videoResponse.ok) {
+        throw new Error(
+          `Failed to fetch video from Replicate URL: ${videoResponse.statusText}`,
+        );
+      }
+      const videoBlob = await videoResponse.blob();
+      const videoStorageId = await ctx.storage.store(videoBlob);
+
+      await ctx.runMutation(internal.segments.updateVideoClipVersion, {
+        videoClipVersionId,
+        storageId: videoStorageId,
+        generationStatus: "generated",
+      });
+
+      // [FIXED] Call with the correct argument name: `clipId`
+      await ctx.scheduler.runAfter(
+        0,
+        internal.videoProcessing.generateVideoThumbnails,
+        {
+          clipId: videoClipVersionId,
+        },
+      );
+
+      await ctx.scheduler.runAfter(
+        0,
+        internal.media.generateEmbeddingForVideo,
+        {
+          videoClipVersionId: videoClipVersionId,
+        },
+      );
+
+      return { success: true };
+    } catch (error: any) {
+      console.error(
+        `Transition generation failed for clip ${videoClipVersionId}:`,
+        error,
+      );
+      if (videoClipVersionId) {
+        await ctx.runMutation(internal.segments.updateVideoClipVersion, {
+          videoClipVersionId,
+          generationStatus: "error",
+          statusMessage: error.message,
+        });
+      }
       return { success: false, error: error.message };
     }
   },

@@ -8,39 +8,38 @@ import { toast } from "sonner";
 import { Loader2, UploadCloud } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-interface ImageUploaderProps {
+interface MediaUploaderProps {
   segmentId: Id<"segments">;
   onUploadComplete?: () => void;
 }
 
-export function ImageUploader({
+export function MediaUploader({
   segmentId,
   onUploadComplete,
-}: ImageUploaderProps) {
+}: MediaUploaderProps) {
   const { t } = useTranslation();
   const [isUploading, setIsUploading] = useState(false);
   const generateUploadUrl = useConvexMutation(api.files.generateUploadUrl);
+  const saveUpload = useConvexMutation(api.files.saveUserUpload);
 
-  const { mutateAsync: startUpload, isPending: isStartingUpload } = useMutation(
-    {
-      mutationFn: useConvexMutation(
-        api.imageVersions.startUploadAndSelectVersion,
-      ),
-      onSuccess: () => {
-        onUploadComplete?.();
-      },
-      onError: (err) => {
-        toast.error(t("toastUploadProcessingFailed"));
-        console.error(err);
-      },
+  const { mutateAsync: saveUploadMutation, isPending: isSaving } = useMutation({
+    mutationFn: saveUpload,
+    onSuccess: () => {
+      onUploadComplete?.();
     },
-  );
+    onError: (err) => {
+      toast.error(t("toastUploadProcessingFailed"));
+      console.error(err);
+    },
+  });
 
   const onDrop = async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     const file = acceptedFiles[0];
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error(t("toastFileTooLarge"));
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error(
+        t("toastFileTooLarge50MB", "File cannot be larger than 50MB"),
+      );
       return;
     }
 
@@ -55,9 +54,10 @@ export function ImageUploader({
       });
       const { storageId } = await result.json();
 
-      await startUpload({
+      await saveUploadMutation({
         segmentId,
-        uploadedImageId: storageId,
+        storageId,
+        mimeType: file.type,
       });
     } catch (error) {
       console.error("Upload failed:", error);
@@ -67,11 +67,11 @@ export function ImageUploader({
     }
   };
 
-  const isProcessing = isUploading || isStartingUpload;
+  const isProcessing = isUploading || isSaving;
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { "image/*": [] },
+    accept: { "image/*": [], "video/*": [] },
     multiple: false,
     disabled: isProcessing,
   });
@@ -97,7 +97,12 @@ export function ImageUploader({
         <>
           <UploadCloud className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
           <p className="text-sm text-muted-foreground">
-            {isDragActive ? t("uploaderDropHere") : t("uploaderDragDrop")}
+            {isDragActive
+              ? t("uploaderDropHere")
+              : t(
+                  "uploaderDragDropMedia",
+                  "Drag & drop files here, or click to select",
+                )}
           </p>
         </>
       )}

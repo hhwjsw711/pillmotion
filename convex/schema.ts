@@ -92,6 +92,7 @@ export const IMAGE_VERSION_SOURCES = [
   "user_uploaded",
   "ai_edited",
   "from_library",
+  "frame_extracted",
 ] as const;
 export const imageVersionSourceValidator = v.union(
   ...IMAGE_VERSION_SOURCES.map((s) => v.literal(s)),
@@ -147,14 +148,18 @@ export const videoClipContextValidator = v.union(
     sourceImageId: v.id("imageVersions"),
     prompt: v.optional(v.string()), // prompt在这里是可选的
   }),
-  // 类型三：首尾帧视频（转场）的上下文
+  // [NEW] 类型三：用户上传
+  v.object({
+    type: v.literal("user_uploaded"),
+  }),
+  // 类型四：首尾帧视频（转场）的上下文
   v.object({
     type: v.literal("transition"),
     startImageId: v.id("imageVersions"),
     endImageId: v.id("imageVersions"),
     prompt: v.optional(v.string()), // 转场效果的文字描述
   }),
-  // 类型四：视频转绘（为未来预留）
+  // 类型五：视频转绘（为未来预留）
   v.object({
     type: v.literal("video_to_video"),
     sourceVideoClipId: v.id("videoClipVersions"),
@@ -252,6 +257,8 @@ const schema = defineSchema({
     .index("by_segment", ["segmentId"])
     .index("by_user", ["userId"]) // 保留此索引
     .index("by_user_string", ["userIdString"]) // 新增此索引
+    .index("by_image", ["image"])
+    .index("by_previewImage", ["previewImage"])
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
       dimensions: 768,
@@ -266,7 +273,9 @@ const schema = defineSchema({
     processingStatus: v.optional(videoProcessingStatusValidator),
     generationId: v.optional(v.string()),
     statusMessage: v.optional(v.string()),
-  }).index("by_story", ["storyId"]),
+  })
+    .index("by_story", ["storyId"])
+    .index("by_storageId", ["storageId"]),
   videoClipVersions: defineTable({
     segmentId: v.id("segments"),
     userId: v.id("users"),
@@ -274,6 +283,7 @@ const schema = defineSchema({
     context: videoClipContextValidator,
     storageId: v.optional(v.id("_storage")),
     posterStorageId: v.optional(v.id("_storage")),
+    lastFramePosterStorageId: v.optional(v.id("_storage")),
     generationStatus: videoClipGenerationStatusValidator,
     processingStatus: v.optional(videoProcessingStatusValidator),
     statusMessage: v.optional(v.string()),
@@ -283,6 +293,9 @@ const schema = defineSchema({
     .index("by_segment", ["segmentId"])
     .index("by_user", ["userId"])
     .index("by_user_string", ["userIdString"])
+    .index("by_storageId", ["storageId"])
+    .index("by_posterStorageId", ["posterStorageId"])
+    .index("by_lastFramePosterStorageId", ["lastFramePosterStorageId"])
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
       dimensions: 768,

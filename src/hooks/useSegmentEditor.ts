@@ -10,16 +10,15 @@ import { Id, Doc } from "~/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
-// [UPGRADE] Expand the sub-version type to include the new posterUrl.
 export type ImageVersionWithSubVersions = Doc<"imageVersions"> & {
   previewImageUrl: string | null;
   videoSubVersions: (Doc<"videoClipVersions"> & {
     videoUrl: string | null;
     posterUrl: string | null;
+    lastFramePosterUrl: string | null;
   })[];
 };
 
-// [NEW] Define a type for the new unified timeline model
 export type HistoryTimelineNode =
   | {
       type: "image";
@@ -31,6 +30,7 @@ export type HistoryTimelineNode =
       version: Doc<"videoClipVersions"> & {
         videoUrl: string | null;
         posterUrl: string | null;
+        lastFramePosterUrl: string | null;
       };
       _creationTime: number;
     };
@@ -39,7 +39,6 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
-  // 1. DATA FETCHING (Unchanged)
   const queryKey = useMemo(
     () => convexQuery(api.segments.getSegmentEditorData, { segmentId }),
     [segmentId],
@@ -50,41 +49,57 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
   const imageVersions = data?.imageVersions ?? [];
   const videoClipVersions = data?.videoClipVersions ?? [];
 
-  // [REFACTOR] Create a unified, sorted timeline instead of the old tree structure
   const versionHistory: HistoryTimelineNode[] = useMemo(() => {
-    // 1. Create nodes for each image version, attaching their video children
-    const imageNodes: HistoryTimelineNode[] = imageVersions.map((img) => {
-      const subVersions = videoClipVersions.filter(
-        (vid) =>
-          vid.context.type === "image_to_video" &&
-          vid.context.sourceImageId === img._id,
-      );
-      return {
-        type: "image",
-        version: {
-          ...img,
-          videoSubVersions: subVersions,
-        },
-        _creationTime: img._creationTime,
-      };
+    if (!data) return [];
+
+    const videoVersionsMap = new Map<
+      Id<"imageVersions">,
+      (Doc<"videoClipVersions"> & {
+        videoUrl: string | null;
+        posterUrl: string | null;
+        lastFramePosterUrl: string | null;
+      })[]
+    >();
+    const standaloneVideoClips: HistoryTimelineNode[] = [];
+
+    videoClipVersions.forEach((clip) => {
+      let parentImageId: Id<"imageVersions"> | undefined = undefined;
+      // [FIX] Only "image_to_video" has a sourceImageId. This prevents crashes.
+      if (clip.context.type === "image_to_video") {
+        parentImageId = clip.context.sourceImageId;
+      }
+
+      if (parentImageId && imageVersions.some((v) => v._id === parentImageId)) {
+        if (!videoVersionsMap.has(parentImageId)) {
+          videoVersionsMap.set(parentImageId, []);
+        }
+        videoVersionsMap.get(parentImageId)!.push(clip);
+      } else {
+        // [FIX] All other video types are correctly treated as standalone top-level nodes.
+        standaloneVideoClips.push({
+          type: "video",
+          version: clip,
+          _creationTime: clip._creationTime,
+        });
+      }
     });
 
-    // 2. Create nodes for standalone text-to-video clips
-    const standaloneVideoNodes: HistoryTimelineNode[] = videoClipVersions
-      .filter((vid) => vid.context.type === "text_to_video")
-      .map((vid) => ({
-        type: "video",
-        version: vid,
-        _creationTime: vid._creationTime,
-      }));
+    const imageNodes: HistoryTimelineNode[] = imageVersions.map((version) => ({
+      type: "image",
+      version: {
+        ...version,
+        videoSubVersions: videoVersionsMap.get(version._id) ?? [],
+      },
+      _creationTime: version._creationTime,
+    }));
 
-    // 3. Combine and sort into a single timeline, newest first
-    return [...imageNodes, ...standaloneVideoNodes].sort(
+    return [...imageNodes, ...standaloneVideoClips].sort(
       (a, b) => b._creationTime - a._creationTime,
     );
-  }, [imageVersions, videoClipVersions]);
+  }, [imageVersions, videoClipVersions, data]);
 
   const selectedImageVersion = useMemo(
+    // [FIX] Consistently use 'selectedVersionId' as hinted by the error message.
     () => imageVersions.find((v) => v._id === segment?.selectedVersionId),
     [imageVersions, segment?.selectedVersionId],
   );
@@ -97,11 +112,16 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
     [videoClipVersions, segment?.selectedVideoClipVersionId],
   );
 
-  // 3. STATE MANAGEMENT (Unchanged)
   const [promptText, setPromptText] = useState("");
   const [tuningPrompt, setTuningPrompt] = useState("");
+  const [startFrameSourceId, setStartFrameSourceId] = useState<
+    Id<"imageVersions"> | Id<"videoClipVersions"> | null
+  >(null);
+  const [endFrameSourceId, setEndFrameSourceId] = useState<
+    Id<"imageVersions"> | Id<"videoClipVersions"> | null
+  >(null);
+  const [transitionPrompt, setTransitionPrompt] = useState("");
 
-  // 4. MUTATIONS (REFACTORED to return full mutation objects)
   const invalidateSegmentData = () =>
     queryClient.invalidateQueries({ queryKey: queryKey.queryKey });
 
@@ -118,14 +138,15 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
     mutationFn: useConvexMutation(api.segments.editImage),
     onSuccess: () => {
       toast.success(t("toastImageEditStarted"));
-      setTuningPrompt(""); // Also clear the prompt on success
+      setTuningPrompt("");
       invalidateSegmentData();
     },
     onError: (e) => toast.error((e as Error).message),
   });
 
   const selectImageMutation = useTanstackMutation({
-    mutationFn: useConvexMutation(api.imageVersions.selectVersion),
+    // [FIX] Use the consistent and logical API endpoint on `segments`.
+    mutationFn: useConvexMutation(api.segments.selectImageVersion),
     onSuccess: () => {
       toast.success(t("toastVersionSelected"));
       invalidateSegmentData();
@@ -160,12 +181,22 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
     onError: (e) => toast.error((e as Error).message),
   });
 
-  // 5. DERIVED STATE (Simplified)
+  const generateTransitionMutation = useTanstackMutation({
+    mutationFn: useConvexMutation(api.video.generateTransition),
+    onSuccess: () => {
+      toast.success(t("toastTransitionGenerationStarted"));
+      setStartFrameSourceId(null);
+      setEndFrameSourceId(null);
+      setTransitionPrompt("");
+      invalidateSegmentData();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
   const isSelecting =
     selectImageMutation.isPending || selectVideoMutation.isPending;
-  const isGenerating = segment?.isGenerating; // The backend now provides the single source of truth
+  const isGenerating = segment?.isGenerating;
 
-  // 6. SIDE EFFECTS (Unchanged)
   useEffect(() => {
     if (selectedImageVersion?.prompt) {
       setPromptText(selectedImageVersion.prompt);
@@ -178,21 +209,19 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
   }, [selectedImageVersion, imageVersions]);
 
   useEffect(() => {
-    if (segment?.isGenerating === false && segment.error) {
+    if (segment?.isGenerating === false && segment?.error) {
       toast.error(t("toastImageProcessFailed"), {
         description: segment.error,
       });
       invalidateSegmentData();
     }
-  }, [segment?.isGenerating, segment?.error, t, invalidateSegmentData]);
+  }, [segment, t, invalidateSegmentData]);
 
   return {
-    // Data
     segment,
-    versionHistory, // [REPLACE] Export the new unified timeline
+    versionHistory,
     selectedImageVersion,
     selectedVideoClipVersion,
-    // State
     isLoading,
     isGenerating,
     isSelecting,
@@ -200,14 +229,19 @@ export function useSegmentEditor(segmentId: Id<"segments">) {
     setPromptText,
     tuningPrompt,
     setTuningPrompt,
-    // Mutations (return the full objects)
+    startFrameSourceId,
+    setStartFrameSourceId,
+    endFrameSourceId,
+    setEndFrameSourceId,
+    transitionPrompt,
+    setTransitionPrompt,
     regenerateImageMutation,
     editImageMutation,
     selectImageMutation,
     selectVideoMutation,
     generateImageToVideoMutation,
     generateTextToVideoMutation,
-    // Actions
+    generateTransitionMutation,
     refetch,
   };
 }

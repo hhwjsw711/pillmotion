@@ -53,6 +53,21 @@ async function getTextEmbedding(text: string): Promise<number[] | null> {
   }
 }
 
+async function getImageEmbedding(imageUrl: string): Promise<number[] | null> {
+  if (!imageUrl) return null;
+  try {
+    const output = (await replicate.run(CLIP_MODEL_AND_VERSION, {
+      input: {
+        image: imageUrl,
+      },
+    })) as { input: string; embedding: number[] }[];
+    return output[0]?.embedding;
+  } catch (error) {
+    console.error("Failed to get image embedding from Replicate", error);
+    return null;
+  }
+}
+
 // =================================================================
 // >> Section 1: Embedding Generation (FIXED)
 // =================================================================
@@ -76,23 +91,31 @@ export const generateEmbeddingForImage = internalAction({
         versionId: imageVersionId,
       },
     );
-    if (!version || !version.prompt) {
-      console.warn(`Image version ${imageVersionId} has no prompt. Skipping.`);
+    if (!version) {
+      console.warn(`Image version ${imageVersionId} not found. Skipping.`);
       return;
     }
 
-    try {
-      const embedding = await getTextEmbedding(version.prompt);
-      if (embedding) {
-        await ctx.runMutation(internal.media.storeImageEmbedding, {
-          imageVersionId,
-          embedding: embedding,
-        });
+    let embedding: number[] | null = null;
+    if (version.prompt) {
+      embedding = await getTextEmbedding(version.prompt);
+    } else if (version.image) {
+      const imageUrl = await ctx.storage.getUrl(version.image);
+      if (imageUrl) {
+        embedding = await getImageEmbedding(imageUrl);
+      } else {
+        console.warn(`Could not get URL for source image of ${imageVersionId}`);
       }
-    } catch (error) {
-      console.error(
-        `Failed to generate embedding for image ${imageVersionId}`,
-        error,
+    }
+
+    if (embedding) {
+      await ctx.runMutation(internal.media.storeImageEmbedding, {
+        imageVersionId,
+        embedding: embedding,
+      });
+    } else {
+      console.warn(
+        `Skipping embedding for image ${imageVersionId}, no suitable source found.`,
       );
     }
   },
@@ -108,10 +131,6 @@ export const storeVideoEmbedding = internalMutation({
   },
 });
 
-/**
- * [FIXED] This action now correctly extracts the prompt from the `context` object
- * before generating an embedding for the video.
- */
 export const generateEmbeddingForVideo = internalAction({
   args: { videoClipVersionId: v.id("videoClipVersions") },
   handler: async (ctx, { videoClipVersionId }) => {
@@ -125,28 +144,35 @@ export const generateEmbeddingForVideo = internalAction({
       return;
     }
 
-    // [CRITICAL FIX] Extract prompt from the context object.
-    const prompt = videoVersion.context.prompt;
+    let embedding: number[] | null = null;
+    const { context } = videoVersion;
 
-    if (!prompt) {
-      console.warn(
-        `Video clip version ${videoClipVersionId} has no prompt in its context. Skipping embedding.`,
-      );
-      return;
+    // [FIX] Generalize the embedding logic to be more robust.
+    // 1. Prioritize a text prompt if one exists.
+    if ("prompt" in context && context.prompt) {
+      embedding = await getTextEmbedding(context.prompt);
+    }
+    // 2. If no prompt, fall back to the poster image for a visual embedding.
+    //    This correctly handles user uploads, transitions without prompts, etc.
+    else if (videoVersion.posterStorageId) {
+      const imageUrl = await ctx.storage.getUrl(videoVersion.posterStorageId);
+      if (imageUrl) {
+        embedding = await getImageEmbedding(imageUrl);
+      } else {
+        console.warn(
+          `Could not get URL for poster of video ${videoClipVersionId}`,
+        );
+      }
     }
 
-    try {
-      const embedding = await getTextEmbedding(prompt);
-      if (embedding) {
-        await ctx.runMutation(internal.media.storeVideoEmbedding, {
-          videoClipVersionId,
-          embedding: embedding,
-        });
-      }
-    } catch (error) {
-      console.error(
-        `Failed to generate embedding for video ${videoClipVersionId}`,
-        error,
+    if (embedding) {
+      await ctx.runMutation(internal.media.storeVideoEmbedding, {
+        videoClipVersionId,
+        embedding: embedding,
+      });
+    } else {
+      console.warn(
+        `Skipping embedding for video ${videoClipVersionId}, no suitable source found. Context type: ${videoVersion.context.type}`,
       );
     }
   },
@@ -200,10 +226,6 @@ export const getBatchOfImages = internalQuery({
   },
 });
 
-/**
- * [FIXED] This query now correctly resolves the preview URL for videos
- * by looking inside the `context` object for the `sourceImageId`.
- */
 export const getBatchOfVideos = internalQuery({
   args: { ids: v.array(v.id("videoClipVersions")) },
   handler: async (ctx, { ids }) => {
@@ -213,7 +235,6 @@ export const getBatchOfVideos = internalQuery({
     ) as Doc<"videoClipVersions">[];
     return await Promise.all(
       nonNullRecords.map(async (record) => {
-        // [UPGRADE] Fetch video URL and poster URL in parallel
         const [videoUrl, posterUrl] = await Promise.all([
           record.storageId ? ctx.storage.getUrl(record.storageId) : null,
           record.posterStorageId
@@ -221,7 +242,6 @@ export const getBatchOfVideos = internalQuery({
             : null,
         ]);
 
-        // Get the preview from the source image, if it exists in the context.
         let previewUrl: string | null = null;
         if (record.context.type === "image_to_video") {
           const sourceImage = await ctx.db.get(record.context.sourceImageId);
@@ -235,16 +255,13 @@ export const getBatchOfVideos = internalQuery({
           ...record,
           previewUrl,
           videoUrl,
-          posterUrl, // [NEW] Add posterUrl to the return object
+          posterUrl,
         };
       }),
     );
   },
 });
 
-/**
- * [FIXED] This query also correctly resolves preview URLs for recent videos.
- */
 export const getRecentMedia = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, { userId }): Promise<SearchResult[]> => {
@@ -261,7 +278,6 @@ export const getRecentMedia = internalQuery({
         .take(10),
     ]);
 
-    // Hydrate images with URLs
     const imagesWithData: ImageSearchResult[] = await Promise.all(
       images.map(async (record) => ({
         ...record,
@@ -273,10 +289,8 @@ export const getRecentMedia = internalQuery({
       })),
     );
 
-    // Hydrate videos with URLs
     const videosWithData: VideoSearchResult[] = await Promise.all(
       videos.map(async (record) => {
-        // [UPGRADE] Fetch video URL and poster URL in parallel
         const [videoUrl, posterUrl] = await Promise.all([
           record.storageId ? ctx.storage.getUrl(record.storageId) : null,
           record.posterStorageId
@@ -284,7 +298,6 @@ export const getRecentMedia = internalQuery({
             : null,
         ]);
 
-        // Resolve preview URL from context
         let previewUrl: string | null = null;
         if (record.context.type === "image_to_video") {
           const sourceImage = await ctx.db.get(record.context.sourceImageId);
@@ -297,7 +310,7 @@ export const getRecentMedia = internalQuery({
           resultType: "video" as const,
           previewUrl,
           videoUrl,
-          posterUrl, // [NEW] Add posterUrl to the return object
+          posterUrl,
           _score: 0,
         };
       }),

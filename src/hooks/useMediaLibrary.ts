@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { useEffect, useState } from "react";
 import { useAction } from "convex/react";
 import { api } from "~/convex/_generated/api";
-import { Doc } from "~/convex/_generated/dataModel";
+import { Doc, Id } from "~/convex/_generated/dataModel";
 import { useDebounce } from "use-debounce";
 
 // --- Types for Search Results ---
@@ -77,7 +77,31 @@ export function useMediaLibrary() {
           searchText: debouncedSearchTerm || undefined,
         });
         if (!isCancelled) {
-          setState({ results: data, isLoading: false, error: null });
+          // [NEW] De-duplicate results on the frontend to avoid showing clones.
+          const seenImageStorageIds = new Set<Id<"_storage">>();
+          const seenVideoStorageIds = new Set<Id<"_storage">>();
+
+          const uniqueResults = data.filter((result) => {
+            if (result.resultType === "image") {
+              if (seenImageStorageIds.has(result.image)) {
+                return false; // It's a duplicate, filter it out.
+              }
+              seenImageStorageIds.add(result.image);
+              return true;
+            } else if (result.resultType === "video") {
+              if (result.storageId) {
+                if (seenVideoStorageIds.has(result.storageId)) {
+                  return false; // It's a duplicate, filter it out.
+                }
+                seenVideoStorageIds.add(result.storageId);
+                return true;
+              }
+            }
+            // Keep any unexpected items by default.
+            return true;
+          });
+
+          setState({ results: uniqueResults, isLoading: false, error: null });
         }
       } catch (err) {
         if (!isCancelled) {

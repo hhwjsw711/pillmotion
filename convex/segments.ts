@@ -16,6 +16,7 @@ import OpenAI from "openai";
 import { Id } from "./_generated/dataModel";
 import { consumeCreditsHelper } from "./credits";
 import { verifySegmentOwner, verifyStoryOwner } from "./lib/auth";
+import { ConvexError } from "convex/values";
 
 const openai = new OpenAI();
 
@@ -32,65 +33,81 @@ const openai = new OpenAI();
 export const getSegmentEditorData = query({
   args: { segmentId: v.id("segments") },
   handler: async (ctx, args) => {
-    // Authorize and get the segment in one go.
-    const { segment } = await verifySegmentOwner(ctx, args.segmentId);
-    if (!segment) {
-      return null;
-    }
+    // [FIX] Gracefully handle cases where the segment is deleted but a query for it is still active.
+    try {
+      // Authorize and get the segment in one go.
+      const { segment } = await verifySegmentOwner(ctx, args.segmentId);
 
-    // Fetch all image and video versions for this segment in parallel.
-    const [imageVersions, videoClipVersions] = await Promise.all([
-      // Fetch all image versions with their URLs pre-signed.
-      ctx.db
-        .query("imageVersions")
-        .withIndex("by_segment", (q) => q.eq("segmentId", args.segmentId))
-        .order("desc")
-        .collect()
-        .then((versions) =>
-          Promise.all(
-            versions.map(async (version) => ({
-              ...version,
-              previewImageUrl: version.previewImage
-                ? await ctx.storage.getUrl(version.previewImage)
-                : null,
-            })),
-          ),
-        ),
-      // Fetch all video versions with their URLs pre-signed.
-      ctx.db
-        .query("videoClipVersions")
-        .withIndex("by_segment", (q) => q.eq("segmentId", args.segmentId))
-        .order("desc")
-        .collect()
-        .then((versions) =>
-          Promise.all(
-            versions.map(async (version) => {
-              // [NEW] Fetch video URL and poster URL in parallel for efficiency
-              const [videoUrl, posterUrl] = await Promise.all([
-                version.storageId
-                  ? ctx.storage.getUrl(version.storageId)
-                  : null,
-                version.posterStorageId
-                  ? ctx.storage.getUrl(version.posterStorageId)
-                  : null,
-              ]);
-              return {
+      // Fetch all image and video versions for this segment in parallel.
+      const [imageVersions, videoClipVersions] = await Promise.all([
+        // Fetch all image versions with their URLs pre-signed.
+        ctx.db
+          .query("imageVersions")
+          .withIndex("by_segment", (q) => q.eq("segmentId", args.segmentId))
+          .order("desc")
+          .collect()
+          .then((versions) =>
+            Promise.all(
+              versions.map(async (version) => ({
                 ...version,
-                videoUrl,
-                posterUrl,
-              };
-            }),
+                previewImageUrl: version.previewImage
+                  ? await ctx.storage.getUrl(version.previewImage)
+                  : null,
+              })),
+            ),
           ),
-        ),
-    ]);
+        // Fetch all video versions with their URLs pre-signed.
+        ctx.db
+          .query("videoClipVersions")
+          .withIndex("by_segment", (q) => q.eq("segmentId", args.segmentId))
+          .order("desc")
+          .collect()
+          .then((versions) =>
+            Promise.all(
+              versions.map(async (version) => {
+                // [NEW] Fetch video URL and poster URL in parallel for efficiency
+                const [videoUrl, posterUrl, lastFramePosterUrl] =
+                  await Promise.all([
+                    version.storageId
+                      ? ctx.storage.getUrl(version.storageId)
+                      : null,
+                    version.posterStorageId
+                      ? ctx.storage.getUrl(version.posterStorageId)
+                      : null,
+                    version.lastFramePosterStorageId
+                      ? ctx.storage.getUrl(version.lastFramePosterStorageId)
+                      : null,
+                  ]);
+                return {
+                  ...version,
+                  videoUrl,
+                  posterUrl,
+                  lastFramePosterUrl,
+                };
+              }),
+            ),
+          ),
+      ]);
 
-    // This clean data structure is much simpler for the backend to provide
-    // and easier for the frontend to consume.
-    return {
-      segment,
-      imageVersions,
-      videoClipVersions,
-    };
+      // This clean data structure is much simpler for the backend to provide
+      // and easier for the frontend to consume.
+      return {
+        segment,
+        imageVersions,
+        videoClipVersions,
+      };
+    } catch (error) {
+      // If the error is due to the segment/story not being found (e.g., it was deleted),
+      // we can safely return null. For other errors (like auth), we should re-throw.
+      if (
+        error instanceof ConvexError &&
+        (error.message.includes("Segment not found") ||
+          error.message.includes("Story not found"))
+      ) {
+        return null;
+      }
+      throw error;
+    }
   },
 });
 
@@ -212,6 +229,8 @@ export const selectVideoClipVersion = mutation({
         userIdString: originalVersion.userIdString,
         context: originalVersion.context, // The "blueprint" of the video
         storageId: originalVersion.storageId,
+        // [FIX] Also clone the poster frame ID to ensure it's visible in the UI
+        posterStorageId: originalVersion.posterStorageId,
         embedding: originalVersion.embedding,
         // Set new segment-specific data for the clone
         segmentId: segmentId, // Link to the current segment
@@ -231,6 +250,70 @@ export const selectVideoClipVersion = mutation({
     });
 
     // [CONSISTENCY] Also trigger a story thumbnail update.
+    const segment = await ctx.db.get(segmentId);
+    if (segment) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.story.internalUpdateStoryThumbnail,
+        {
+          storyId: segment.storyId,
+        },
+      );
+    }
+  },
+});
+
+/**
+ * [NEW] User-facing mutation to select an image version for a segment.
+ * This mirrors the logic of `selectVideoClipVersion`, including cloning
+ * the image if it's selected from the media library (i.e., belongs to another segment).
+ */
+export const selectImageVersion = mutation({
+  args: {
+    segmentId: v.id("segments"),
+    versionId: v.id("imageVersions"),
+  },
+  handler: async (ctx, { segmentId, versionId }) => {
+    const { userId } = await verifySegmentOwner(ctx, segmentId);
+
+    const originalVersion = await ctx.db.get(versionId);
+    if (!originalVersion) {
+      throw new Error("Original image version not found");
+    }
+
+    if (originalVersion.userId !== userId) {
+      throw new Error("You do not have permission to use this image.");
+    }
+
+    let versionToSelectId = versionId;
+
+    if (originalVersion.segmentId !== segmentId) {
+      const newVersionId = await ctx.db.insert("imageVersions", {
+        // Carry over essential, immutable data
+        userId: originalVersion.userId,
+        userIdString: originalVersion.userIdString,
+        image: originalVersion.image,
+        previewImage: originalVersion.previewImage,
+        prompt: originalVersion.prompt,
+        embedding: originalVersion.embedding,
+        // Set new segment-specific data for the clone
+        segmentId: segmentId, // Link to the current segment
+        source: "from_library",
+        // [FIX] Removed the non-existent 'generationStatus' field.
+      });
+      versionToSelectId = newVersionId;
+    }
+
+    // Atomically update the segment to point to the correct image version
+    // and CLEAR the selected video version.
+    await ctx.db.patch(segmentId, {
+      selectedVersionId: versionToSelectId,
+      selectedVideoClipVersionId: undefined,
+      isGenerating: false,
+      error: undefined,
+    });
+
+    // Also trigger a story thumbnail update.
     const segment = await ctx.db.get(segmentId);
     if (segment) {
       await ctx.scheduler.runAfter(
@@ -278,17 +361,13 @@ export const regenerateImage = mutation({
 export const editImage = mutation({
   args: {
     segmentId: v.id("segments"),
-    prompt: v.string(),
     versionIdToEdit: v.id("imageVersions"),
+    // [FIX] Use the correct argument names to match the internal action
+    newInstruction: v.string(),
+    originalPrompt: v.optional(v.string()),
   },
-  async handler(ctx, args) {
+  handler: async (ctx, args) => {
     const { userId } = await verifySegmentOwner(ctx, args.segmentId);
-
-    const versionToEdit = await ctx.db.get(args.versionIdToEdit);
-    if (!versionToEdit || versionToEdit.segmentId !== args.segmentId) {
-      throw new Error("Version to edit is not valid for this segment.");
-    }
-
     await consumeCreditsHelper(ctx, userId, CREDIT_COSTS.IMAGE_GENERATION);
 
     await ctx.db.patch(args.segmentId, {
@@ -296,14 +375,15 @@ export const editImage = mutation({
       error: undefined,
     });
 
+    // [FIX] Pass all the correct arguments through to the action
     await ctx.scheduler.runAfter(
       0,
       internal.replicate.editSegmentImageUsingPrompt,
       {
         segmentId: args.segmentId,
-        newInstruction: args.prompt,
         versionIdToEdit: args.versionIdToEdit,
-        originalPrompt: versionToEdit.prompt,
+        newInstruction: args.newInstruction,
+        originalPrompt: args.originalPrompt,
       },
     );
   },
@@ -390,29 +470,75 @@ export const deleteSegment = mutation({
         .collect(),
     ]);
 
-    const deletionPromises: Promise<void | null>[] = [];
+    // [REFACTORED] New safe deletion logic with reverse lookup.
+    const storageIdsToDelete = new Set<Id<"_storage">>();
 
+    // 1. Check image assets for sharing and collect safe ones.
     for (const version of imageVersions) {
-      if (version.image) {
-        deletionPromises.push(ctx.storage.delete(version.image));
+      // Check main image
+      const imageRefs = await ctx.db
+        .query("imageVersions")
+        .withIndex("by_image", (q) => q.eq("image", version.image))
+        .collect();
+      if (imageRefs.length <= 1) {
+        storageIdsToDelete.add(version.image);
       }
+      // Check preview image
       if (version.previewImage) {
-        deletionPromises.push(ctx.storage.delete(version.previewImage));
+        const previewImageRefs = await ctx.db
+          .query("imageVersions")
+          .withIndex("by_previewImage", (q) =>
+            q.eq("previewImage", version.previewImage!),
+          )
+          .collect();
+        if (previewImageRefs.length <= 1) {
+          storageIdsToDelete.add(version.previewImage);
+        }
       }
-      deletionPromises.push(ctx.db.delete(version._id));
     }
 
+    // 2. Check video assets for sharing and collect safe ones.
     for (const clip of videoClipVersions) {
+      // Check main video
       if (clip.storageId) {
-        deletionPromises.push(ctx.storage.delete(clip.storageId));
+        const videoRefs = await ctx.db
+          .query("videoClipVersions")
+          .withIndex("by_storageId", (q) => q.eq("storageId", clip.storageId!))
+          .collect();
+        if (videoRefs.length <= 1) {
+          storageIdsToDelete.add(clip.storageId);
+        }
       }
-      deletionPromises.push(ctx.db.delete(clip._id));
+      // Check poster image
+      if (clip.posterStorageId) {
+        const posterRefs = await ctx.db
+          .query("videoClipVersions")
+          .withIndex("by_posterStorageId", (q) =>
+            q.eq("posterStorageId", clip.posterStorageId!),
+          )
+          .collect();
+        if (posterRefs.length <= 1) {
+          storageIdsToDelete.add(clip.posterStorageId);
+        }
+      }
     }
 
-    deletionPromises.push(ctx.db.delete(segmentId));
+    // 3. Perform deletions.
+    // Delete only the storage assets that are not shared.
+    const storageDeletionPromises = Array.from(storageIdsToDelete).map((id) =>
+      ctx.storage.delete(id),
+    );
 
-    await Promise.all(deletionPromises);
+    // Always delete the database records for the versions and the segment itself.
+    const dbDeletionPromises = [
+      ...imageVersions.map((v) => ctx.db.delete(v._id)),
+      ...videoClipVersions.map((c) => ctx.db.delete(c._id)),
+      ctx.db.delete(segmentId),
+    ];
 
+    await Promise.all([...storageDeletionPromises, ...dbDeletionPromises]);
+
+    // 4. Re-order subsequent segments (this logic remains the same).
     const subsequentSegments = await ctx.db
       .query("segments")
       .withIndex("by_story_order", (q) =>
@@ -531,6 +657,7 @@ export const getImageToVideoGenerationData = internalQuery({
       segmentText: segment.text,
       storyStyle: story.stylePrompt,
       imageUrl: imageUrl,
+      imagePrompt: imageVersion.prompt, // [FIX] Add the missing prompt
     };
   },
 });
