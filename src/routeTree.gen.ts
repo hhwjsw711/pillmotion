@@ -22,10 +22,12 @@ import { Route as AppLoginLayoutImport } from './routes/_app/login/_layout'
 import { Route as AppLoginLayoutIndexImport } from './routes/_app/login/_layout.index'
 import { Route as AppAuthStoriesLayoutImport } from './routes/_app/_auth/stories/_layout'
 import { Route as AppAuthOnboardingLayoutImport } from './routes/_app/_auth/onboarding/_layout'
+import { Route as AppAuthMedialibraryLayoutImport } from './routes/_app/_auth/medialibrary/_layout'
 import { Route as AppAuthGenerateLayoutImport } from './routes/_app/_auth/generate/_layout'
 import { Route as AppAuthDashboardLayoutImport } from './routes/_app/_auth/dashboard/_layout'
 import { Route as AppAuthCharactersLayoutImport } from './routes/_app/_auth/characters/_layout'
 import { Route as AppAuthStoriesLayoutIndexImport } from './routes/_app/_auth/stories/_layout.index'
+import { Route as AppAuthMedialibraryLayoutIndexImport } from './routes/_app/_auth/medialibrary/_layout.index'
 import { Route as AppAuthGenerateLayoutIndexImport } from './routes/_app/_auth/generate/_layout.index'
 import { Route as AppAuthDashboardLayoutIndexImport } from './routes/_app/_auth/dashboard/_layout.index'
 import { Route as AppAuthCharactersLayoutIndexImport } from './routes/_app/_auth/characters/_layout.index'
@@ -45,6 +47,7 @@ import { Route as AppAuthStoriesLayoutStoryIdSegmentsSegmentIdIndexImport } from
 const AppLoginImport = createFileRoute('/_app/login')()
 const AppAuthStoriesImport = createFileRoute('/_app/_auth/stories')()
 const AppAuthOnboardingImport = createFileRoute('/_app/_auth/onboarding')()
+const AppAuthMedialibraryImport = createFileRoute('/_app/_auth/medialibrary')()
 const AppAuthGenerateImport = createFileRoute('/_app/_auth/generate')()
 const AppAuthDashboardImport = createFileRoute('/_app/_auth/dashboard')()
 const AppAuthCharactersImport = createFileRoute('/_app/_auth/characters')()
@@ -91,6 +94,11 @@ const AppAuthOnboardingRoute = AppAuthOnboardingImport.update({
   getParentRoute: () => AppAuthRoute,
 } as any)
 
+const AppAuthMedialibraryRoute = AppAuthMedialibraryImport.update({
+  path: '/medialibrary',
+  getParentRoute: () => AppAuthRoute,
+} as any)
+
 const AppAuthGenerateRoute = AppAuthGenerateImport.update({
   path: '/generate',
   getParentRoute: () => AppAuthRoute,
@@ -126,6 +134,11 @@ const AppAuthOnboardingLayoutRoute = AppAuthOnboardingLayoutImport.update({
   getParentRoute: () => AppAuthOnboardingRoute,
 } as any)
 
+const AppAuthMedialibraryLayoutRoute = AppAuthMedialibraryLayoutImport.update({
+  id: '/_layout',
+  getParentRoute: () => AppAuthMedialibraryRoute,
+} as any)
+
 const AppAuthGenerateLayoutRoute = AppAuthGenerateLayoutImport.update({
   id: '/_layout',
   getParentRoute: () => AppAuthGenerateRoute,
@@ -145,6 +158,12 @@ const AppAuthStoriesLayoutIndexRoute = AppAuthStoriesLayoutIndexImport.update({
   path: '/',
   getParentRoute: () => AppAuthStoriesLayoutRoute,
 } as any)
+
+const AppAuthMedialibraryLayoutIndexRoute =
+  AppAuthMedialibraryLayoutIndexImport.update({
+    path: '/',
+    getParentRoute: () => AppAuthMedialibraryLayoutRoute,
+  } as any)
 
 const AppAuthGenerateLayoutIndexRoute = AppAuthGenerateLayoutIndexImport.update(
   {
@@ -320,6 +339,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAuthGenerateLayoutImport
       parentRoute: typeof AppAuthGenerateRoute
     }
+    '/_app/_auth/medialibrary': {
+      id: '/_app/_auth/medialibrary'
+      path: '/medialibrary'
+      fullPath: '/medialibrary'
+      preLoaderRoute: typeof AppAuthMedialibraryImport
+      parentRoute: typeof AppAuthImport
+    }
+    '/_app/_auth/medialibrary/_layout': {
+      id: '/_app/_auth/medialibrary/_layout'
+      path: '/medialibrary'
+      fullPath: '/medialibrary'
+      preLoaderRoute: typeof AppAuthMedialibraryLayoutImport
+      parentRoute: typeof AppAuthMedialibraryRoute
+    }
     '/_app/_auth/onboarding': {
       id: '/_app/_auth/onboarding'
       path: '/onboarding'
@@ -404,6 +437,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAuthGenerateLayoutIndexImport
       parentRoute: typeof AppAuthGenerateLayoutImport
     }
+    '/_app/_auth/medialibrary/_layout/': {
+      id: '/_app/_auth/medialibrary/_layout/'
+      path: '/'
+      fullPath: '/medialibrary/'
+      preLoaderRoute: typeof AppAuthMedialibraryLayoutIndexImport
+      parentRoute: typeof AppAuthMedialibraryLayoutImport
+    }
     '/_app/_auth/stories/_layout/': {
       id: '/_app/_auth/stories/_layout/'
       path: '/'
@@ -483,6 +523,12 @@ export const routeTree = rootRoute.addChildren({
           AppAuthGenerateLayoutIndexRoute,
         }),
       }),
+      AppAuthMedialibraryRoute: AppAuthMedialibraryRoute.addChildren({
+        AppAuthMedialibraryLayoutRoute:
+          AppAuthMedialibraryLayoutRoute.addChildren({
+            AppAuthMedialibraryLayoutIndexRoute,
+          }),
+      }),
       AppAuthOnboardingRoute: AppAuthOnboardingRoute.addChildren({
         AppAuthOnboardingLayoutRoute: AppAuthOnboardingLayoutRoute.addChildren({
           AppAuthOnboardingLayoutUsernameRoute,
@@ -548,6 +594,7 @@ export const routeTree = rootRoute.addChildren({
         "/_app/_auth/characters",
         "/_app/_auth/dashboard",
         "/_app/_auth/generate",
+        "/_app/_auth/medialibrary",
         "/_app/_auth/onboarding",
         "/_app/_auth/stories"
       ]
@@ -608,6 +655,20 @@ export const routeTree = rootRoute.addChildren({
       "parent": "/_app/_auth/generate",
       "children": [
         "/_app/_auth/generate/_layout/"
+      ]
+    },
+    "/_app/_auth/medialibrary": {
+      "filePath": "_app/_auth/medialibrary",
+      "parent": "/_app/_auth",
+      "children": [
+        "/_app/_auth/medialibrary/_layout"
+      ]
+    },
+    "/_app/_auth/medialibrary/_layout": {
+      "filePath": "_app/_auth/medialibrary/_layout.tsx",
+      "parent": "/_app/_auth/medialibrary",
+      "children": [
+        "/_app/_auth/medialibrary/_layout/"
       ]
     },
     "/_app/_auth/onboarding": {
@@ -680,6 +741,10 @@ export const routeTree = rootRoute.addChildren({
     "/_app/_auth/generate/_layout/": {
       "filePath": "_app/_auth/generate/_layout.index.tsx",
       "parent": "/_app/_auth/generate/_layout"
+    },
+    "/_app/_auth/medialibrary/_layout/": {
+      "filePath": "_app/_auth/medialibrary/_layout.index.tsx",
+      "parent": "/_app/_auth/medialibrary/_layout"
     },
     "/_app/_auth/stories/_layout/": {
       "filePath": "_app/_auth/stories/_layout.index.tsx",

@@ -317,6 +317,12 @@ const schema = defineSchema({
     coverImageId: v.id("_storage"), // 封面图，用于UI显示
     trainingDataZipId: v.id("_storage"), // 包含所有训练图片的zip文件
   }).index("by_user", ["userId"]),
+  media: defineTable({
+    key: v.string(),
+    bucket: v.string(),
+    caption: v.optional(v.string()),
+    contentType: v.optional(v.string()),
+  }).index("bucket_key", ["bucket", "key"]),
 });
 
 export default schema;

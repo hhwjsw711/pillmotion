@@ -16,6 +16,7 @@ import { Route as DashboardRoute } from "@/routes/_app/_auth/dashboard/_layout.i
 import { Route as GenerateRoute } from "@/routes/_app/_auth/generate/_layout.index";
 import { Route as StoriesRoute } from "@/routes/_app/_auth/stories/_layout.index";
 import { Route as CharactersRoute } from "@/routes/_app/_auth/characters/_layout.index";
+import { Route as MediaLibraryRoute } from "@/routes/_app/_auth/medialibrary/_layout.index";
 import { Route as SettingsRoute } from "@/routes/_app/_auth/dashboard/_layout.settings.index";
 import { Route as BillingSettingsRoute } from "@/routes/_app/_auth/dashboard/_layout.settings.billing";
 import { User } from "~/types";
@@ -33,6 +34,7 @@ export function Navigation({ user }: { user: User }) {
   const isGeneratePath = matchRoute({ to: GenerateRoute.fullPath });
   const isStoriesPath = matchRoute({ to: StoriesRoute.fullPath });
   const isCharactersPath = matchRoute({ to: CharactersRoute.fullPath });
+  const isMediaLibraryPath = matchRoute({ to: MediaLibraryRoute.fullPath });
   const isSettingsPath = matchRoute({ to: SettingsRoute.fullPath });
   const isBillingPath = matchRoute({ to: BillingSettingsRoute.fullPath });
 
@@ -215,6 +217,21 @@ export function Navigation({ user }: { user: User }) {
             )}
           >
             Characters
+          </Link>
+        </div>
+        <div
+          className={cn(
+            `flex h-12 items-center border-b-2`,
+            isMediaLibraryPath ? "border-primary" : "border-transparent",
+          )}
+        >
+          <Link
+            to={MediaLibraryRoute.fullPath}
+            className={cn(
+              `${buttonVariants({ variant: "ghost", size: "sm" })} text-primary/80`,
+            )}
+          >
+            Media Library
           </Link>
         </div>
         <div
