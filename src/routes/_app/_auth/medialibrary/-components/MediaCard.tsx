@@ -6,10 +6,11 @@ import { useEffect, useRef, useState } from "react";
 
 function getMediaTypeFromContentType(
   contentType: string | null | undefined,
-): "image" | "video" | "unknown" {
+): "image" | "video" | "audio" | "unknown" {
   if (!contentType) return "unknown";
   if (contentType.startsWith("image/")) return "image";
   if (contentType.startsWith("video/")) return "video";
+  if (contentType.startsWith("audio/")) return "audio";
   return "unknown";
 }
 
@@ -61,6 +62,13 @@ export const MediaCard = ({
           >
             Your browser does not support the video tag.
           </video>
+        )}
+        {mediaType === "audio" && mediaItem.url && (
+          <div className="flex h-56 w-full items-center justify-center bg-secondary p-4">
+            <audio src={mediaItem.url} controls className="w-full">
+              Your browser does not support the audio element.
+            </audio>
+          </div>
         )}
         {mediaType === "unknown" && (
           <div className="flex h-56 w-full items-center justify-center bg-secondary">

@@ -79,7 +79,7 @@ export default function MediaLibraryPage() {
             <input
               id="file-upload"
               type="file"
-              accept="image/*,video/*"
+              accept="image/*,video/*,audio/*"
               onChange={handleUpload}
               className="hidden"
             />

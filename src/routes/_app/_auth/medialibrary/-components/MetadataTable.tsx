@@ -11,7 +11,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowUpDown, FileImage, PlayCircle } from "lucide-react";
+import { ArrowUpDown, FileImage, PlayCircle, FileAudio } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -20,13 +20,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 
 function getMediaTypeFromContentType(
   contentType: string | null | undefined,
-): "image" | "video" | "unknown" {
+): "image" | "video" | "audio" | "unknown" {
   if (!contentType) return "unknown";
   if (contentType.startsWith("image/")) return "image";
   if (contentType.startsWith("video/")) return "video";
+  if (contentType.startsWith("audio/")) return "audio";
   return "unknown";
 }
 
@@ -107,6 +109,25 @@ const columns: ColumnDef<
               <PlayCircle className="h-6 w-6 text-white/80" />
             </div>
           </div>
+        );
+      }
+      if (mediaType === "audio" && url) {
+        return (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                className="flex h-12 w-16 items-center justify-center rounded-sm bg-muted p-0 hover:bg-muted/80"
+              >
+                <FileAudio className="h-6 w-6 text-muted-foreground" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64">
+              <audio src={url} controls autoPlay className="w-full">
+                Your browser does not support the audio element.
+              </audio>
+            </PopoverContent>
+          </Popover>
         );
       }
       return (
