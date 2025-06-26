@@ -317,5 +317,36 @@
       "deleteSuccess": "Character deleted.",
       "deleteError": "Failed to delete character."
     }
+  },
+  "mediaGallery": {
+    "title": "Media Gallery",
+    "description": "Upload and manage your files here.",
+    "searchPlaceholder": "Search by title or filename...",
+    "filters": {
+      "all": "All",
+      "image": "Images",
+      "video": "Videos",
+      "audio": "Audio"
+    },
+    "buttons": {
+      "upload": "Upload File"
+    },
+    "empty": {
+      "title": "Your Media Library is Empty",
+      "description": "Click 'Upload File' or drag and drop files onto the page to get started."
+    },
+    "noResults": {
+      "title": "No Matching Results",
+      "description": "Try adjusting your filters or search term."
+    },
+    "card": {
+      "captionPlaceholder": "Add a caption",
+      "deleteAriaLabel": "Delete media"
+    },
+    "viewer": {
+      "closeAriaLabel": "Close viewer",
+      "previousAriaLabel": "Previous media",
+      "nextAriaLabel": "Next media"
+    }
   }
 }

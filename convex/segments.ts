@@ -473,56 +473,84 @@ export const deleteSegment = mutation({
         .collect(),
     ]);
 
-    // [REFACTORED] New safe deletion logic with reverse lookup.
-    const storageIdsToDelete = new Set<Id<"_storage">>();
-
-    // 1. Check image assets for sharing and collect safe ones.
-    for (const version of imageVersions) {
-      // Check main image
-      const imageRefs = await ctx.db
-        .query("imageVersions")
-        .withIndex("by_image", (q) => q.eq("image", version.image))
-        .collect();
-      if (imageRefs.length <= 1) {
-        storageIdsToDelete.add(version.image);
-      }
-      // Check preview image
-      if (version.previewImage) {
-        const previewImageRefs = await ctx.db
+    // [REFACTORED & FIXED] A comprehensive helper function to check all possible references to a storage ID
+    // before marking it for deletion. This fixes the cross-type reference counting bug.
+    const getStorageIdUsageCount = async (storageId: Id<"_storage">) => {
+      const [
+        imageRefs,
+        previewImageRefs,
+        videoRefs,
+        posterRefs,
+        lastFramePosterRefs,
+      ] = await Promise.all([
+        ctx.db
           .query("imageVersions")
-          .withIndex("by_previewImage", (q) =>
-            q.eq("previewImage", version.previewImage!),
+          .withIndex("by_image", (q) => q.eq("image", storageId))
+          .collect(),
+        ctx.db
+          .query("imageVersions")
+          .withIndex("by_previewImage", (q) => q.eq("previewImage", storageId))
+          .collect(),
+        ctx.db
+          .query("videoClipVersions")
+          .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
+          .collect(),
+        ctx.db
+          .query("videoClipVersions")
+          .withIndex("by_posterStorageId", (q) =>
+            q.eq("posterStorageId", storageId),
           )
-          .collect();
-        if (previewImageRefs.length <= 1) {
-          storageIdsToDelete.add(version.previewImage);
-        }
+          .collect(),
+        ctx.db
+          .query("videoClipVersions")
+          .withIndex("by_lastFramePosterStorageId", (q) =>
+            q.eq("lastFramePosterStorageId", storageId),
+          )
+          .collect(),
+      ]);
+
+      // Use a Set to count unique documents that reference the storageId
+      const uniqueReferrers = new Set<string>();
+      imageRefs.forEach((doc) => uniqueReferrers.add(doc._id.toString()));
+      previewImageRefs.forEach((doc) =>
+        uniqueReferrers.add(doc._id.toString()),
+      );
+      videoRefs.forEach((doc) => uniqueReferrers.add(doc._id.toString()));
+      posterRefs.forEach((doc) => uniqueReferrers.add(doc._id.toString()));
+      lastFramePosterRefs.forEach((doc) =>
+        uniqueReferrers.add(doc._id.toString()),
+      );
+
+      return uniqueReferrers.size;
+    };
+
+    // 1. Collect all unique storage IDs from the segment being deleted.
+    const potentialIdsToDelete = new Set<Id<"_storage">>();
+    for (const version of imageVersions) {
+      potentialIdsToDelete.add(version.image);
+      if (version.previewImage) {
+        potentialIdsToDelete.add(version.previewImage);
+      }
+    }
+    for (const clip of videoClipVersions) {
+      if (clip.storageId) {
+        potentialIdsToDelete.add(clip.storageId);
+      }
+      if (clip.posterStorageId) {
+        potentialIdsToDelete.add(clip.posterStorageId);
+      }
+      if (clip.lastFramePosterStorageId) {
+        potentialIdsToDelete.add(clip.lastFramePosterStorageId);
       }
     }
 
-    // 2. Check video assets for sharing and collect safe ones.
-    for (const clip of videoClipVersions) {
-      // Check main video
-      if (clip.storageId) {
-        const videoRefs = await ctx.db
-          .query("videoClipVersions")
-          .withIndex("by_storageId", (q) => q.eq("storageId", clip.storageId!))
-          .collect();
-        if (videoRefs.length <= 1) {
-          storageIdsToDelete.add(clip.storageId);
-        }
-      }
-      // Check poster image
-      if (clip.posterStorageId) {
-        const posterRefs = await ctx.db
-          .query("videoClipVersions")
-          .withIndex("by_posterStorageId", (q) =>
-            q.eq("posterStorageId", clip.posterStorageId!),
-          )
-          .collect();
-        if (posterRefs.length <= 1) {
-          storageIdsToDelete.add(clip.posterStorageId);
-        }
+    // 2. For each unique ID, check its global usage count. Only add to the
+    // final deletion list if it's not shared.
+    const storageIdsToDelete = new Set<Id<"_storage">>();
+    for (const storageId of potentialIdsToDelete) {
+      const usageCount = await getStorageIdUsageCount(storageId);
+      if (usageCount <= 1) {
+        storageIdsToDelete.add(storageId);
       }
     }
 

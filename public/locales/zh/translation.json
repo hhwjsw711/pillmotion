@@ -317,5 +317,36 @@
       "deleteSuccess": "角色已删除。",
       "deleteError": "删除角色失败。"
     }
+  },
+  "mediaGallery": {
+    "title": "媒体库",
+    "description": "在这里上传和管理您的文件。",
+    "searchPlaceholder": "按标题或文件名搜索...",
+    "filters": {
+      "all": "全部",
+      "image": "图片",
+      "video": "视频",
+      "audio": "音频"
+    },
+    "buttons": {
+      "upload": "上传文件"
+    },
+    "empty": {
+      "title": "您的媒体库是空的",
+      "description": "点击“上传文件”或直接拖拽文件到此页面即可开始。"
+    },
+    "noResults": {
+      "title": "无匹配结果",
+      "description": "请尝试更改筛选条件或搜索关键词。"
+    },
+    "card": {
+      "captionPlaceholder": "添加标题",
+      "deleteAriaLabel": "删除媒体"
+    },
+    "viewer": {
+      "closeAriaLabel": "关闭预览",
+      "previousAriaLabel": "上一个媒体",
+      "nextAriaLabel": "下一个媒体"
+    }
   }
 }

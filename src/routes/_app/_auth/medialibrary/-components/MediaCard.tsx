@@ -1,8 +1,9 @@
 import { api } from "~/convex/_generated/api";
-import { X, FileImage } from "lucide-react";
+import { X, FileImage, PlayCircle, FileAudio } from "lucide-react";
 import { Input } from "@/ui/input";
 import { Id } from "~/convex/_generated/dataModel";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 function getMediaTypeFromContentType(
   contentType: string | null | undefined,
@@ -18,14 +19,17 @@ export const MediaCard = ({
   mediaItem,
   onDelete,
   onUpdateCaption,
+  onClick,
 }: {
   mediaItem: (typeof api.r2.listMedia._returnType)[number];
   onDelete: (key: string) => void;
   onUpdateCaption: (id: Id<"media">, caption: string) => void;
+  onClick: () => void;
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [caption, setCaption] = useState(mediaItem.caption ?? "");
   const mediaType = getMediaTypeFromContentType(mediaItem.contentType);
+  const { t } = useTranslation();
 
   // This effect ensures that if the parent data changes, the local state is updated,
   // but it won't overwrite what the user is currently typing.
@@ -46,7 +50,7 @@ export const MediaCard = ({
       key={mediaItem._id}
       className="flex flex-col overflow-hidden rounded-lg border"
     >
-      <div className="group relative">
+      <div className="group relative cursor-pointer" onClick={onClick}>
         {mediaType === "image" && mediaItem.url && (
           <img
             src={mediaItem.url}
@@ -55,19 +59,26 @@ export const MediaCard = ({
           />
         )}
         {mediaType === "video" && mediaItem.url && (
-          <video
-            src={mediaItem.url}
-            controls
-            className="h-56 w-full object-cover"
-          >
-            Your browser does not support the video tag.
-          </video>
+          <>
+            <video
+              src={`${mediaItem.url}#t=0.1`}
+              muted
+              preload="metadata"
+              className="h-56 w-full bg-black object-cover"
+            >
+              Your browser does not support the video tag.
+            </video>
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
+              <PlayCircle className="h-12 w-12 text-white/80" />
+            </div>
+          </>
         )}
-        {mediaType === "audio" && mediaItem.url && (
-          <div className="flex h-56 w-full items-center justify-center bg-secondary p-4">
-            <audio src={mediaItem.url} controls className="w-full">
-              Your browser does not support the audio element.
-            </audio>
+        {mediaType === "audio" && (
+          <div className="flex h-56 w-full flex-col items-center justify-center bg-secondary p-4">
+            <FileAudio className="h-16 w-16 text-muted-foreground" />
+            <p className="mt-2 w-full truncate px-2 text-center text-sm text-muted-foreground">
+              {mediaItem.key.split("/").pop()}
+            </p>
           </div>
         )}
         {mediaType === "unknown" && (
@@ -77,9 +88,12 @@ export const MediaCard = ({
         )}
 
         <button
-          onClick={() => onDelete(mediaItem.key)}
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent opening viewer when deleting
+            onDelete(mediaItem.key);
+          }}
           className="absolute right-2 top-2 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 transition-opacity hover:bg-destructive/90 group-hover:opacity-100"
-          aria-label="Delete media"
+          aria-label={t("mediaGallery.card.deleteAriaLabel")}
         >
           <X size={20} />
         </button>
@@ -97,7 +111,7 @@ export const MediaCard = ({
             }
           }}
           onBlur={handleSaveCaption}
-          placeholder="Add a caption"
+          placeholder={t("mediaGallery.card.captionPlaceholder")}
           className="w-full border-none bg-transparent text-sm focus:outline-none focus:ring-0"
           aria-label="Media caption"
         />
