@@ -27,7 +27,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
-import { DndContext, closestCenter, useSensors } from "@dnd-kit/core";
+import {
+  DndContext,
+  closestCenter,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
 import {
   SortableContext,
   useSortable,
@@ -37,7 +42,6 @@ import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { SegmentCardSkeleton } from "./-components/segment-card-skeleton";
-import { useStorySegments } from "@/hooks/useStorySegments";
 import { useStoryDetailPage } from "@/hooks/useStoryDetailPage";
 import { Badge } from "@/ui/badge";
 import { useState, useEffect } from "react";
@@ -49,13 +53,17 @@ export const Route = createFileRoute("/_app/_auth/stories/_layout/$storyId/")({
   component: Story,
 });
 
-type SegmentWithImageUrl = ReturnType<
-  typeof useStorySegments
->["segmentsData"][number];
+// [FIXED & IMPROVED] Infer the return type of the hook to use for props.
+// This is the most robust way to handle complex types from external libraries.
+type StoryDetailPageReturn = ReturnType<typeof useStoryDetailPage>;
+type SegmentWithImageUrl = NonNullable<
+  StoryDetailPageReturn["segments"]
+>[number];
 
 export default function Story() {
   const { storyId } = Route.useParams();
   const { t } = useTranslation();
+  // [MODIFIED] We only need this one hook now for the whole page.
   const { story, isLoading } = useStoryDetailPage(storyId as Id<"story">);
 
   if (isLoading) {
@@ -149,6 +157,12 @@ function StorySection({
     stitchingProgress,
     canStitchVideo,
     handleStitchVideo,
+    // [NEW] Get segment-related functions from the main hook
+    segments,
+    isAddingSegment,
+    addSegment,
+    handleDragEnd,
+    pointerSensor,
   } = useStoryDetailPage(storyId);
 
   const { mutate: updateStatus, isPending: isUpdatingStatus } = useMutation({
@@ -409,27 +423,41 @@ function StorySection({
         </div>
       )}
 
-      <StorySegments story={story} />
+      <StorySegments
+        story={story}
+        // [NEW] Pass all segment-related data down from the main hook
+        segmentsData={segments ?? []}
+        isLoading={false} // Loading is handled at the top level now
+        isAdding={isAddingSegment}
+        addSegment={addSegment}
+        handleDragEnd={handleDragEnd}
+        pointerSensor={pointerSensor}
+      />
     </div>
   );
 }
 
 function StorySegments({
   story,
+  // [NEW] Receive all data as props now
+  segmentsData,
+  isLoading,
+  isAdding,
+  addSegment,
+  handleDragEnd,
+  pointerSensor,
 }: {
   story: NonNullable<ReturnType<typeof useStoryDetailPage>["story"]>;
+  segmentsData: SegmentWithImageUrl[];
+  isLoading: boolean;
+  isAdding: boolean;
+  addSegment: () => void;
+  handleDragEnd: (event: DragEndEvent) => void;
+  // [FIXED] Use the robust ReturnType inference to get the exact type.
+  pointerSensor: StoryDetailPageReturn["pointerSensor"];
 }) {
   const { _id: storyId } = story;
   const { t } = useTranslation();
-
-  const {
-    segmentsData,
-    isLoading,
-    isAdding,
-    addSegment,
-    handleDragEnd,
-    pointerSensor,
-  } = useStorySegments(storyId);
 
   const sensors = useSensors(pointerSensor);
 

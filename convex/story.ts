@@ -655,18 +655,70 @@ export const getStoryPageData = query({
       return null;
     }
 
+    // --- [ADDITION START] ---
+    // We are merging the logic from `getSegmentsWithPreview` directly into here.
     const segments = await ctx.db
       .query("segments")
-      .withIndex("by_story", (q) => q.eq("storyId", args.storyId))
+      .withIndex("by_story_order", (q) => q.eq("storyId", args.storyId))
+      .order("asc")
       .collect();
 
-    // [最终修复] 使用 auth.getUserId(ctx) 来获取正确的用户ID进行比较
+    const segmentsWithPreview = await Promise.all(
+      segments.map(async (segment) => {
+        let previewImageUrl: string | null = null;
+        let posterUrl: string | null = null;
+        let videoUrl: string | null = null;
+
+        if (segment.selectedVersionId) {
+          const selectedVersion = await ctx.db.get(segment.selectedVersionId);
+          if (selectedVersion?.previewImage) {
+            try {
+              previewImageUrl = await ctx.storage.getUrl(
+                selectedVersion.previewImage,
+              );
+            } catch (e) {
+              /* Silently fail */
+            }
+          }
+        }
+
+        if (segment.selectedVideoClipVersionId) {
+          const selectedClip = await ctx.db.get(
+            segment.selectedVideoClipVersionId,
+          );
+          if (selectedClip) {
+            try {
+              const [fetchedVideoUrl, fetchedPosterUrl] = await Promise.all([
+                selectedClip.storageId
+                  ? ctx.storage.getUrl(selectedClip.storageId)
+                  : null,
+                selectedClip.posterStorageId
+                  ? ctx.storage.getUrl(selectedClip.posterStorageId)
+                  : null,
+              ]);
+              videoUrl = fetchedVideoUrl;
+              posterUrl = fetchedPosterUrl;
+            } catch (e) {
+              /* Silently fail */
+            }
+          }
+        }
+
+        return {
+          ...segment,
+          previewImageUrl,
+          posterUrl,
+          videoUrl,
+        };
+      }),
+    );
+    // --- [ADDITION END] ---
+
     const userId = await auth.getUserId(ctx);
     let videoVersion:
       | (Doc<"videoVersions"> & { videoUrl: string | null })
       | null = null;
 
-    // 使用正确的用户ID恢复所有权检查
     if (userId && story.userId === userId) {
       if (story.selectedVideoVersionId) {
         const versionDoc = await ctx.db.get(story.selectedVideoVersionId);
@@ -681,6 +733,8 @@ export const getStoryPageData = query({
 
     return {
       story: { ...story, segmentCount: segments.length },
+      // [MODIFICATION] Return the segments along with the story data
+      segments: segmentsWithPreview,
       videoVersion,
     };
   },
