@@ -4,11 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
 import { api } from "@cvx/_generated/api";
 
-export const Route = createFileRoute("/_app/_auth/dashboard/_layout")({
-  component: DashboardLayout,
+export const Route = createFileRoute("/_app/_auth/video-to-markdown/_layout")({
+  component: VideoToMarkdownLayout,
 });
 
-function DashboardLayout() {
+function VideoToMarkdownLayout() {
   const { data: user } = useQuery(convexQuery(api.app.getCurrentUser, {}));
   if (!user) {
     return null;

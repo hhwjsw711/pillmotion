@@ -18,8 +18,10 @@ import { Route as IndexImport } from './routes/index'
 import { Route as AppAuthImport } from './routes/_app/_auth'
 import { Route as AppLoginLayoutImport } from './routes/_app/login/_layout'
 import { Route as AppLoginLayoutIndexImport } from './routes/_app/login/_layout.index'
+import { Route as AppAuthVideoToMarkdownLayoutImport } from './routes/_app/_auth/video-to-markdown/_layout'
 import { Route as AppAuthOnboardingLayoutImport } from './routes/_app/_auth/onboarding/_layout'
 import { Route as AppAuthDashboardLayoutImport } from './routes/_app/_auth/dashboard/_layout'
+import { Route as AppAuthVideoToMarkdownLayoutIndexImport } from './routes/_app/_auth/video-to-markdown/_layout.index'
 import { Route as AppAuthDashboardLayoutIndexImport } from './routes/_app/_auth/dashboard/_layout.index'
 import { Route as AppAuthOnboardingLayoutUsernameImport } from './routes/_app/_auth/onboarding/_layout.username'
 import { Route as AppAuthDashboardLayoutSettingsImport } from './routes/_app/_auth/dashboard/_layout.settings'
@@ -30,6 +32,9 @@ import { Route as AppAuthDashboardLayoutSettingsBillingImport } from './routes/_
 // Create Virtual Routes
 
 const AppLoginImport = createFileRoute('/_app/login')()
+const AppAuthVideoToMarkdownImport = createFileRoute(
+  '/_app/_auth/video-to-markdown',
+)()
 const AppAuthOnboardingImport = createFileRoute('/_app/_auth/onboarding')()
 const AppAuthDashboardImport = createFileRoute('/_app/_auth/dashboard')()
 
@@ -55,6 +60,11 @@ const AppAuthRoute = AppAuthImport.update({
   getParentRoute: () => AppRoute,
 } as any)
 
+const AppAuthVideoToMarkdownRoute = AppAuthVideoToMarkdownImport.update({
+  path: '/video-to-markdown',
+  getParentRoute: () => AppAuthRoute,
+} as any)
+
 const AppAuthOnboardingRoute = AppAuthOnboardingImport.update({
   path: '/onboarding',
   getParentRoute: () => AppAuthRoute,
@@ -75,6 +85,12 @@ const AppLoginLayoutIndexRoute = AppLoginLayoutIndexImport.update({
   getParentRoute: () => AppLoginLayoutRoute,
 } as any)
 
+const AppAuthVideoToMarkdownLayoutRoute =
+  AppAuthVideoToMarkdownLayoutImport.update({
+    id: '/_layout',
+    getParentRoute: () => AppAuthVideoToMarkdownRoute,
+  } as any)
+
 const AppAuthOnboardingLayoutRoute = AppAuthOnboardingLayoutImport.update({
   id: '/_layout',
   getParentRoute: () => AppAuthOnboardingRoute,
@@ -84,6 +100,12 @@ const AppAuthDashboardLayoutRoute = AppAuthDashboardLayoutImport.update({
   id: '/_layout',
   getParentRoute: () => AppAuthDashboardRoute,
 } as any)
+
+const AppAuthVideoToMarkdownLayoutIndexRoute =
+  AppAuthVideoToMarkdownLayoutIndexImport.update({
+    path: '/',
+    getParentRoute: () => AppAuthVideoToMarkdownLayoutRoute,
+  } as any)
 
 const AppAuthDashboardLayoutIndexRoute =
   AppAuthDashboardLayoutIndexImport.update({
@@ -188,6 +210,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAuthOnboardingLayoutImport
       parentRoute: typeof AppAuthOnboardingRoute
     }
+    '/_app/_auth/video-to-markdown': {
+      id: '/_app/_auth/video-to-markdown'
+      path: '/video-to-markdown'
+      fullPath: '/video-to-markdown'
+      preLoaderRoute: typeof AppAuthVideoToMarkdownImport
+      parentRoute: typeof AppAuthImport
+    }
+    '/_app/_auth/video-to-markdown/_layout': {
+      id: '/_app/_auth/video-to-markdown/_layout'
+      path: '/video-to-markdown'
+      fullPath: '/video-to-markdown'
+      preLoaderRoute: typeof AppAuthVideoToMarkdownLayoutImport
+      parentRoute: typeof AppAuthVideoToMarkdownRoute
+    }
     '/_app/login/_layout/': {
       id: '/_app/login/_layout/'
       path: '/'
@@ -222,6 +258,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/'
       preLoaderRoute: typeof AppAuthDashboardLayoutIndexImport
       parentRoute: typeof AppAuthDashboardLayoutImport
+    }
+    '/_app/_auth/video-to-markdown/_layout/': {
+      id: '/_app/_auth/video-to-markdown/_layout/'
+      path: '/'
+      fullPath: '/video-to-markdown/'
+      preLoaderRoute: typeof AppAuthVideoToMarkdownLayoutIndexImport
+      parentRoute: typeof AppAuthVideoToMarkdownLayoutImport
     }
     '/_app/_auth/dashboard/_layout/settings/billing': {
       id: '/_app/_auth/dashboard/_layout/settings/billing'
@@ -262,6 +305,12 @@ export const routeTree = rootRoute.addChildren({
           AppAuthOnboardingLayoutUsernameRoute,
         }),
       }),
+      AppAuthVideoToMarkdownRoute: AppAuthVideoToMarkdownRoute.addChildren({
+        AppAuthVideoToMarkdownLayoutRoute:
+          AppAuthVideoToMarkdownLayoutRoute.addChildren({
+            AppAuthVideoToMarkdownLayoutIndexRoute,
+          }),
+      }),
     }),
     AppLoginRoute: AppLoginRoute.addChildren({
       AppLoginLayoutRoute: AppLoginLayoutRoute.addChildren({
@@ -298,7 +347,8 @@ export const routeTree = rootRoute.addChildren({
       "parent": "/_app",
       "children": [
         "/_app/_auth/dashboard",
-        "/_app/_auth/onboarding"
+        "/_app/_auth/onboarding",
+        "/_app/_auth/video-to-markdown"
       ]
     },
     "/_app/login": {
@@ -345,6 +395,20 @@ export const routeTree = rootRoute.addChildren({
         "/_app/_auth/onboarding/_layout/username"
       ]
     },
+    "/_app/_auth/video-to-markdown": {
+      "filePath": "_app/_auth/video-to-markdown",
+      "parent": "/_app/_auth",
+      "children": [
+        "/_app/_auth/video-to-markdown/_layout"
+      ]
+    },
+    "/_app/_auth/video-to-markdown/_layout": {
+      "filePath": "_app/_auth/video-to-markdown/_layout.tsx",
+      "parent": "/_app/_auth/video-to-markdown",
+      "children": [
+        "/_app/_auth/video-to-markdown/_layout/"
+      ]
+    },
     "/_app/login/_layout/": {
       "filePath": "_app/login/_layout.index.tsx",
       "parent": "/_app/login/_layout"
@@ -368,6 +432,10 @@ export const routeTree = rootRoute.addChildren({
     "/_app/_auth/dashboard/_layout/": {
       "filePath": "_app/_auth/dashboard/_layout.index.tsx",
       "parent": "/_app/_auth/dashboard/_layout"
+    },
+    "/_app/_auth/video-to-markdown/_layout/": {
+      "filePath": "_app/_auth/video-to-markdown/_layout.index.tsx",
+      "parent": "/_app/_auth/video-to-markdown/_layout"
     },
     "/_app/_auth/dashboard/_layout/settings/billing": {
       "filePath": "_app/_auth/dashboard/_layout.settings.billing.tsx",
