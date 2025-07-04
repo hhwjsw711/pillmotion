@@ -119,6 +119,7 @@ const schema = defineSchema({
     ),
     isVertical: v.optional(v.boolean()),
     context: v.optional(v.string()),
+    error: v.optional(v.string()),
   }).index("userId", ["userId"]),
   credits: defineTable({
     userId: v.id("users"),

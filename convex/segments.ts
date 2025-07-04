@@ -54,34 +54,43 @@ export const generateSegmentImageReplicateInternal = internalAction({
     }),
   },
   async handler(ctx, args) {
-    const prompt = await openai.chat.completions
-      .create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: getSystemPrompt(args.context),
-          },
-          { role: "user", content: args.segment.text },
-        ],
-        response_format: zodResponseFormat(
-          z.object({ prompt: z.string() }),
-          "prompt",
-        ),
-      })
-      .then((completions) => {
-        const content = completions.choices[0].message.content as string;
-        return JSON.parse(content).prompt as string;
-      });
+    try {
+      const prompt = await openai.chat.completions
+        .create({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: getSystemPrompt(args.context),
+            },
+            { role: "user", content: args.segment.text },
+          ],
+          response_format: zodResponseFormat(
+            z.object({ prompt: z.string() }),
+            "prompt",
+          ),
+        })
+        .then((completions) => {
+          const content = completions.choices[0].message.content as string;
+          return JSON.parse(content).prompt as string;
+        });
 
-    await ctx.scheduler.runAfter(
-      0,
-      internal.replicate.regenerateSegmentImageUsingPrompt,
-      {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.replicate.regenerateSegmentImageUsingPrompt,
+        {
+          segmentId: args.segment._id,
+          prompt,
+        },
+      );
+    } catch (error) {
+      console.error("Error generating segment image prompt:", error);
+      await ctx.runMutation(internal.segments.updateSegment, {
         segmentId: args.segment._id,
-        prompt,
-      },
-    );
+        isGenerating: false,
+        error: (error as Error).message,
+      });
+    }
   },
 });
 

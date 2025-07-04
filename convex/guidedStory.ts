@@ -56,27 +56,36 @@ export const generateGuidedStoryAction = internalAction({
     userId: v.id("users"),
   },
   async handler(ctx, args) {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a professional writer tasked with creating a short story for a voice over based on a given description. The story should be a story that is 10,000 characters max length. DO NOT TITLE ANY SEGMENT. JUST RETURN THE TEXT OF THE ENTIRE STORY. THIS IS FOR A VOICE OVER, ONLY INCLUDE THE SPOKEN WORDS.",
-        },
-        { role: "user", content: args.description },
-      ],
-      temperature: 0.8,
-    });
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a professional writer tasked with creating a short story for a voice over based on a given description. The story should be a story that is 10,000 characters max length. DO NOT TITLE ANY SEGMENT. JUST RETURN THE TEXT OF THE ENTIRE STORY. THIS IS FOR A VOICE OVER, ONLY INCLUDE THE SPOKEN WORDS.",
+          },
+          { role: "user", content: args.description },
+        ],
+        temperature: 0.8,
+      });
 
-    const story = response.choices[0].message.content;
-    if (!story) throw new Error("Failed to generate story");
+      const story = response.choices[0].message.content;
+      if (!story) throw new Error("Failed to generate story");
 
-    await ctx.runMutation(internal.guidedStory.updateStoryScript, {
-      storyId: args.storyId,
-      script: story,
-      status: "completed",
-    });
+      await ctx.runMutation(internal.story.updateStory, {
+        storyId: args.storyId,
+        script: story,
+        status: "completed",
+      });
+    } catch (error) {
+      console.error("Error generating guided story:", error);
+      await ctx.runMutation(internal.story.updateStory, {
+        storyId: args.storyId,
+        status: "failed",
+        error: (error as Error).message,
+      });
+    }
   },
 });
 
@@ -139,23 +148,35 @@ export const generateSegmentsAction = internalAction({
     userId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const context = await generateContext(args.script);
-    if (!context) throw new Error("Failed to generate context");
+    try {
+      const context = await generateContext(args.script);
+      if (!context) throw new Error("Failed to generate context");
 
-    const segments = args.script.split(/\n{2,}/);
+      const segments = args.script.split(/\n{2,}/);
 
-    await ctx.runMutation(internal.story.updateStoryContext, {
-      storyId: args.storyId,
-      context,
-    });
-
-    for (let i = 0; i < segments.length; i++) {
-      await ctx.runMutation(internal.segments.createSegmentWithImageInternal, {
+      await ctx.runMutation(internal.story.updateStory, {
         storyId: args.storyId,
-        text: segments[i],
-        order: i,
         context,
-        userId: args.userId,
+      });
+
+      for (let i = 0; i < segments.length; i++) {
+        await ctx.runMutation(
+          internal.segments.createSegmentWithImageInternal,
+          {
+            storyId: args.storyId,
+            text: segments[i],
+            order: i,
+            context,
+            userId: args.userId,
+          },
+        );
+      }
+    } catch (error) {
+      console.error("Error generating segments:", error);
+      await ctx.runMutation(internal.story.updateStory, {
+        storyId: args.storyId,
+        status: "failed",
+        error: (error as Error).message,
       });
     }
   },
@@ -180,27 +201,22 @@ export async function verifyStoryOwnerHelper(
 }
 
 async function generateContext(script: string): Promise<string> {
-  try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a professional literary analyst. Analyze the provided story and extract its main themes, characters, emotions, atmosphere, setting, and visual style. " +
-            "Create a concise contextual description to guide image generation for each paragraph of the story. " +
-            "Your description should highlight the visual style, tone, and overall aesthetics of the story to ensure consistency across images. " +
-            "Limit your response to 300 words, focusing on elements that would be helpful for image generation.",
-        },
-        { role: "user", content: script },
-      ],
-      temperature: 0.7,
-      max_tokens: 500,
-    });
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a professional literary analyst. Analyze the provided story and extract its main themes, characters, emotions, atmosphere, setting, and visual style. " +
+          "Create a concise contextual description to guide image generation for each paragraph of the story. " +
+          "Your description should highlight the visual style, tone, and overall aesthetics of the story to ensure consistency across images. " +
+          "Limit your response to 300 words, focusing on elements that would be helpful for image generation.",
+      },
+      { role: "user", content: script },
+    ],
+    temperature: 0.7,
+    max_tokens: 500,
+  });
 
-    return response.choices[0].message.content || "";
-  } catch (error) {
-    console.error("Error generating context:", error);
-    return "";
-  }
+  return response.choices[0].message.content || "";
 }
