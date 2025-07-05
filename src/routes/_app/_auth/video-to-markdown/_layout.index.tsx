@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import VideoForm from "./-components/VideoForm";
 import VideosList from "./-components/VideosList";
+import GitHubCorner from "./-components/GitHubCorner";
 
 export const Route = createFileRoute("/_app/_auth/video-to-markdown/_layout/")({
   component: VideoToMarkdown,
@@ -37,6 +38,7 @@ const VideosSection = () => (
 export default function VideoToMarkdown() {
   return (
     <div className="min-h-screen bg-gray-900 relative">
+      <GitHubCorner />
       <div className="relative z-10">
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="space-y-8">
