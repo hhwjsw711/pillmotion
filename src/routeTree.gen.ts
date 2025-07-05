@@ -33,6 +33,7 @@ import { Route as AppAuthOnboardingLayoutUsernameImport } from './routes/_app/_a
 import { Route as AppAuthGenerateGuidedLayoutImport } from './routes/_app/_auth/generate/guided/_layout'
 import { Route as AppAuthDashboardLayoutSettingsImport } from './routes/_app/_auth/dashboard/_layout.settings'
 import { Route as AppAuthDashboardLayoutCheckoutImport } from './routes/_app/_auth/dashboard/_layout.checkout'
+import { Route as AppAuthAgentInboxAgentAgentIdImport } from './routes/_app/_auth/agent-inbox/agent/$agentId'
 import { Route as AppAuthGenerateGuidedLayoutIndexImport } from './routes/_app/_auth/generate/guided/_layout.index'
 import { Route as AppAuthDashboardLayoutSettingsIndexImport } from './routes/_app/_auth/dashboard/_layout.settings.index'
 import { Route as AppAuthStoriesStoryIdRefineLayoutImport } from './routes/_app/_auth/stories/$storyId/refine/_layout'
@@ -218,6 +219,12 @@ const AppAuthDashboardLayoutCheckoutRoute =
     getParentRoute: () => AppAuthDashboardLayoutRoute,
   } as any)
 
+const AppAuthAgentInboxAgentAgentIdRoute =
+  AppAuthAgentInboxAgentAgentIdImport.update({
+    path: '/agent/$agentId',
+    getParentRoute: () => AppAuthAgentInboxRoute,
+  } as any)
+
 const AppAuthGenerateGuidedLayoutIndexRoute =
   AppAuthGenerateGuidedLayoutIndexImport.update({
     path: '/',
@@ -378,6 +385,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLoginLayoutIndexImport
       parentRoute: typeof AppLoginLayoutImport
     }
+    '/_app/_auth/agent-inbox/agent/$agentId': {
+      id: '/_app/_auth/agent-inbox/agent/$agentId'
+      path: '/agent/$agentId'
+      fullPath: '/agent-inbox/agent/$agentId'
+      preLoaderRoute: typeof AppAuthAgentInboxAgentAgentIdImport
+      parentRoute: typeof AppAuthAgentInboxImport
+    }
     '/_app/_auth/dashboard/_layout/checkout': {
       id: '/_app/_auth/dashboard/_layout/checkout'
       path: '/checkout'
@@ -503,6 +517,7 @@ export const routeTree = rootRoute.addChildren({
         AppAuthAgentInboxLayoutRoute: AppAuthAgentInboxLayoutRoute.addChildren({
           AppAuthAgentInboxLayoutIndexRoute,
         }),
+        AppAuthAgentInboxAgentAgentIdRoute,
       }),
       AppAuthDashboardRoute: AppAuthDashboardRoute.addChildren({
         AppAuthDashboardLayoutRoute: AppAuthDashboardLayoutRoute.addChildren({
@@ -614,7 +629,8 @@ export const routeTree = rootRoute.addChildren({
       "filePath": "_app/_auth/agent-inbox",
       "parent": "/_app/_auth",
       "children": [
-        "/_app/_auth/agent-inbox/_layout"
+        "/_app/_auth/agent-inbox/_layout",
+        "/_app/_auth/agent-inbox/agent/$agentId"
       ]
     },
     "/_app/_auth/agent-inbox/_layout": {
@@ -699,6 +715,10 @@ export const routeTree = rootRoute.addChildren({
     "/_app/login/_layout/": {
       "filePath": "_app/login/_layout.index.tsx",
       "parent": "/_app/login/_layout"
+    },
+    "/_app/_auth/agent-inbox/agent/$agentId": {
+      "filePath": "_app/_auth/agent-inbox/agent/$agentId.tsx",
+      "parent": "/_app/_auth/agent-inbox"
     },
     "/_app/_auth/dashboard/_layout/checkout": {
       "filePath": "_app/_auth/dashboard/_layout.checkout.tsx",

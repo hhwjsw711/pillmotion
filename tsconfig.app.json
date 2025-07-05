@@ -37,6 +37,7 @@
     "constants",
     "convex",
     "site.config.ts",
-    "errors.ts"
+    "errors.ts",
+    "shared"
   ]
 }

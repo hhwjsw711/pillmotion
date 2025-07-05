@@ -8,6 +8,11 @@
  * @module
  */
 
+import type * as agents_internalMutations from "../agents/internalMutations.js";
+import type * as agents_internalQueries from "../agents/internalQueries.js";
+import type * as agents_model from "../agents/model.js";
+import type * as agents_mutations from "../agents/mutations.js";
+import type * as agents_queries from "../agents/queries.js";
 import type * as app from "../app.js";
 import type * as auth from "../auth.js";
 import type * as credits from "../credits.js";
@@ -42,6 +47,11 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  "agents/internalMutations": typeof agents_internalMutations;
+  "agents/internalQueries": typeof agents_internalQueries;
+  "agents/model": typeof agents_model;
+  "agents/mutations": typeof agents_mutations;
+  "agents/queries": typeof agents_queries;
   app: typeof app;
   auth: typeof auth;
   credits: typeof credits;

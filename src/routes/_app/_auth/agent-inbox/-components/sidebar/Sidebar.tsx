@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 // import { ConversationList } from "./ConversationList";
-// import { AgentList } from "./AgentList";
+import { AgentList } from "./AgentList";
 import { buttonVariants } from "@/ui/button-util";
 import { cn } from "@/utils/misc";
 import { UserProfile } from "./UserProfile";
@@ -57,6 +57,7 @@ export const Sidebar = ({
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         <div className="flex-1 overflow-y-auto">
           {/* {activeTab === "conversations" ? <ConversationList /> : <AgentList />} */}
+          <AgentList />
         </div>
       </div>
       <UserProfile user={user} />

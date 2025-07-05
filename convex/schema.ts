@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { authTables } from "@convex-dev/auth/server";
 import { v, Infer } from "convex/values";
+import { agentsSchemaValidator } from "./agents/schema";
 
 export const CURRENCIES = {
   USD: "usd",
@@ -135,6 +136,10 @@ const schema = defineSchema({
     image: v.optional(v.id("_storage")),
     previewImage: v.optional(v.id("_storage")),
   }).index("storyId", ["storyId"]),
+  agents: defineTable(agentsSchemaValidator)
+    .index("by_creator", ["createdBy"])
+    .index("by_name", ["name"])
+    .index("by_system_agent_kind", ["systemAgentKind"]),
 });
 
 export default schema;
