@@ -1,6 +1,6 @@
 import { DatabaseReader, MutationCtx, QueryCtx } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
-import { getAuthUserId } from "@convex-dev/auth/server";
+import * as Users from "../users/model";
 import { predefinedAgents } from "../../shared/predefinedAgents";
 import { systemAgentKindValidator, systemAgentValidator } from "./schema";
 
@@ -25,8 +25,7 @@ export const createAgentAvatarUrl = (seed: string) => {
 };
 
 export const createAgent = async (ctx: MutationCtx) => {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) throw new Error("Not authenticated");
+  const userId = await Users.getMyId(ctx);
   const randomIndex = Math.floor(Math.random() * predefinedAgents.length);
   const selectedAgent = predefinedAgents[randomIndex];
 
@@ -63,8 +62,7 @@ export const listForUser = async (
 };
 
 export const listMine = async (ctx: QueryCtx) => {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) throw new Error("Not authenticated");
+  const userId = await Users.getMyId(ctx);
   return listForUser(ctx.db, { userId });
 };
 
@@ -72,8 +70,7 @@ export const findMine = async (
   ctx: QueryCtx,
   { agentId }: { agentId: Id<"agents"> },
 ) => {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) throw new Error("Not authenticated");
+  const userId = await Users.getMyId(ctx);
   const agent = await ctx.db.get(agentId);
   if (!agent) throw new Error("Access denied");
   if (agent.kind != "user_agent") throw new Error("Access denied");

@@ -14,6 +14,7 @@ import { AgentPersonality } from "./AgentPersonality";
 import { AgentTools } from "./AgentTools";
 import { Loader2, Shuffle, Pencil, Check } from "lucide-react";
 import { Input } from "@/ui/input";
+import { Route as AgentInboxIndexRoute } from "@/routes/_app/_auth/agent-inbox/index";
 
 export const AgentProfile = ({ agentId }: { agentId: Id<"agents"> }) => {
   const navigate = useNavigate();
@@ -49,8 +50,8 @@ export const AgentProfile = ({ agentId }: { agentId: Id<"agents"> }) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: agentListQuery.queryKey });
       navigate({
-        to: "/_app/_auth/agent-inbox",
-        search: { tab: "conversations" },
+        to: AgentInboxIndexRoute.to,
+        search: { tab: "agents" },
       });
     },
     onError: onApiError,

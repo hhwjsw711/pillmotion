@@ -59,6 +59,7 @@ export const AgentList = () => {
             key={agent._id}
             to={AgentRoute.to}
             params={{ agentId: agent._id }}
+            search={true}
             className="p-4 hover:bg-accent flex items-center gap-3"
             activeProps={{ className: "bg-accent" }}
           >

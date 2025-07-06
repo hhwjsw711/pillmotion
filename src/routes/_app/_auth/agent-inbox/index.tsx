@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/_app/_auth/agent-inbox/_layout/")({
+export const Route = createFileRoute("/_app/_auth/agent-inbox/")({
   component: AgentInbox,
 });
 

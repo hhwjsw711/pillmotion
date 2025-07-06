@@ -17,22 +17,23 @@ import { Route as AppImport } from './routes/_app'
 import { Route as IndexImport } from './routes/index'
 import { Route as AppAuthImport } from './routes/_app/_auth'
 import { Route as AppLoginLayoutImport } from './routes/_app/login/_layout'
+import { Route as AppAuthAgentInboxRouteImport } from './routes/_app/_auth/agent-inbox/route'
 import { Route as AppLoginLayoutIndexImport } from './routes/_app/login/_layout.index'
+import { Route as AppAuthAgentInboxIndexImport } from './routes/_app/_auth/agent-inbox/index'
 import { Route as AppAuthVideoToMarkdownLayoutImport } from './routes/_app/_auth/video-to-markdown/_layout'
 import { Route as AppAuthOnboardingLayoutImport } from './routes/_app/_auth/onboarding/_layout'
 import { Route as AppAuthImageGenerationLayoutImport } from './routes/_app/_auth/image-generation/_layout'
 import { Route as AppAuthImageEditingLayoutImport } from './routes/_app/_auth/image-editing/_layout'
 import { Route as AppAuthDashboardLayoutImport } from './routes/_app/_auth/dashboard/_layout'
-import { Route as AppAuthAgentInboxLayoutImport } from './routes/_app/_auth/agent-inbox/_layout'
 import { Route as AppAuthVideoToMarkdownLayoutIndexImport } from './routes/_app/_auth/video-to-markdown/_layout.index'
 import { Route as AppAuthImageGenerationLayoutIndexImport } from './routes/_app/_auth/image-generation/_layout.index'
 import { Route as AppAuthImageEditingLayoutIndexImport } from './routes/_app/_auth/image-editing/_layout.index'
 import { Route as AppAuthDashboardLayoutIndexImport } from './routes/_app/_auth/dashboard/_layout.index'
-import { Route as AppAuthAgentInboxLayoutIndexImport } from './routes/_app/_auth/agent-inbox/_layout.index'
 import { Route as AppAuthOnboardingLayoutUsernameImport } from './routes/_app/_auth/onboarding/_layout.username'
 import { Route as AppAuthGenerateGuidedLayoutImport } from './routes/_app/_auth/generate/guided/_layout'
 import { Route as AppAuthDashboardLayoutSettingsImport } from './routes/_app/_auth/dashboard/_layout.settings'
 import { Route as AppAuthDashboardLayoutCheckoutImport } from './routes/_app/_auth/dashboard/_layout.checkout'
+import { Route as AppAuthAgentInboxConversationConversationIdImport } from './routes/_app/_auth/agent-inbox/conversation/$conversationId'
 import { Route as AppAuthAgentInboxAgentAgentIdImport } from './routes/_app/_auth/agent-inbox/agent/$agentId'
 import { Route as AppAuthGenerateGuidedLayoutIndexImport } from './routes/_app/_auth/generate/guided/_layout.index'
 import { Route as AppAuthDashboardLayoutSettingsIndexImport } from './routes/_app/_auth/dashboard/_layout.settings.index'
@@ -52,7 +53,6 @@ const AppAuthImageGenerationImport = createFileRoute(
 )()
 const AppAuthImageEditingImport = createFileRoute('/_app/_auth/image-editing')()
 const AppAuthDashboardImport = createFileRoute('/_app/_auth/dashboard')()
-const AppAuthAgentInboxImport = createFileRoute('/_app/_auth/agent-inbox')()
 const AppAuthGenerateGuidedImport = createFileRoute(
   '/_app/_auth/generate/guided',
 )()
@@ -107,14 +107,14 @@ const AppAuthDashboardRoute = AppAuthDashboardImport.update({
   getParentRoute: () => AppAuthRoute,
 } as any)
 
-const AppAuthAgentInboxRoute = AppAuthAgentInboxImport.update({
-  path: '/agent-inbox',
-  getParentRoute: () => AppAuthRoute,
-} as any)
-
 const AppLoginLayoutRoute = AppLoginLayoutImport.update({
   id: '/_layout',
   getParentRoute: () => AppLoginRoute,
+} as any)
+
+const AppAuthAgentInboxRouteRoute = AppAuthAgentInboxRouteImport.update({
+  path: '/agent-inbox',
+  getParentRoute: () => AppAuthRoute,
 } as any)
 
 const AppAuthGenerateGuidedRoute = AppAuthGenerateGuidedImport.update({
@@ -125,6 +125,11 @@ const AppAuthGenerateGuidedRoute = AppAuthGenerateGuidedImport.update({
 const AppLoginLayoutIndexRoute = AppLoginLayoutIndexImport.update({
   path: '/',
   getParentRoute: () => AppLoginLayoutRoute,
+} as any)
+
+const AppAuthAgentInboxIndexRoute = AppAuthAgentInboxIndexImport.update({
+  path: '/',
+  getParentRoute: () => AppAuthAgentInboxRouteRoute,
 } as any)
 
 const AppAuthVideoToMarkdownLayoutRoute =
@@ -152,11 +157,6 @@ const AppAuthImageEditingLayoutRoute = AppAuthImageEditingLayoutImport.update({
 const AppAuthDashboardLayoutRoute = AppAuthDashboardLayoutImport.update({
   id: '/_layout',
   getParentRoute: () => AppAuthDashboardRoute,
-} as any)
-
-const AppAuthAgentInboxLayoutRoute = AppAuthAgentInboxLayoutImport.update({
-  id: '/_layout',
-  getParentRoute: () => AppAuthAgentInboxRoute,
 } as any)
 
 const AppAuthStoriesStoryIdRefineRoute =
@@ -189,12 +189,6 @@ const AppAuthDashboardLayoutIndexRoute =
     getParentRoute: () => AppAuthDashboardLayoutRoute,
   } as any)
 
-const AppAuthAgentInboxLayoutIndexRoute =
-  AppAuthAgentInboxLayoutIndexImport.update({
-    path: '/',
-    getParentRoute: () => AppAuthAgentInboxLayoutRoute,
-  } as any)
-
 const AppAuthOnboardingLayoutUsernameRoute =
   AppAuthOnboardingLayoutUsernameImport.update({
     path: '/username',
@@ -219,10 +213,16 @@ const AppAuthDashboardLayoutCheckoutRoute =
     getParentRoute: () => AppAuthDashboardLayoutRoute,
   } as any)
 
+const AppAuthAgentInboxConversationConversationIdRoute =
+  AppAuthAgentInboxConversationConversationIdImport.update({
+    path: '/conversation/$conversationId',
+    getParentRoute: () => AppAuthAgentInboxRouteRoute,
+  } as any)
+
 const AppAuthAgentInboxAgentAgentIdRoute =
   AppAuthAgentInboxAgentAgentIdImport.update({
     path: '/agent/$agentId',
-    getParentRoute: () => AppAuthAgentInboxRoute,
+    getParentRoute: () => AppAuthAgentInboxRouteRoute,
   } as any)
 
 const AppAuthGenerateGuidedLayoutIndexRoute =
@@ -280,6 +280,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAuthImport
       parentRoute: typeof AppImport
     }
+    '/_app/_auth/agent-inbox': {
+      id: '/_app/_auth/agent-inbox'
+      path: '/agent-inbox'
+      fullPath: '/agent-inbox'
+      preLoaderRoute: typeof AppAuthAgentInboxRouteImport
+      parentRoute: typeof AppAuthImport
+    }
     '/_app/login': {
       id: '/_app/login'
       path: '/login'
@@ -293,20 +300,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/login'
       preLoaderRoute: typeof AppLoginLayoutImport
       parentRoute: typeof AppLoginRoute
-    }
-    '/_app/_auth/agent-inbox': {
-      id: '/_app/_auth/agent-inbox'
-      path: '/agent-inbox'
-      fullPath: '/agent-inbox'
-      preLoaderRoute: typeof AppAuthAgentInboxImport
-      parentRoute: typeof AppAuthImport
-    }
-    '/_app/_auth/agent-inbox/_layout': {
-      id: '/_app/_auth/agent-inbox/_layout'
-      path: '/agent-inbox'
-      fullPath: '/agent-inbox'
-      preLoaderRoute: typeof AppAuthAgentInboxLayoutImport
-      parentRoute: typeof AppAuthAgentInboxRoute
     }
     '/_app/_auth/dashboard': {
       id: '/_app/_auth/dashboard'
@@ -378,6 +371,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAuthVideoToMarkdownLayoutImport
       parentRoute: typeof AppAuthVideoToMarkdownRoute
     }
+    '/_app/_auth/agent-inbox/': {
+      id: '/_app/_auth/agent-inbox/'
+      path: '/'
+      fullPath: '/agent-inbox/'
+      preLoaderRoute: typeof AppAuthAgentInboxIndexImport
+      parentRoute: typeof AppAuthAgentInboxRouteImport
+    }
     '/_app/login/_layout/': {
       id: '/_app/login/_layout/'
       path: '/'
@@ -390,7 +390,14 @@ declare module '@tanstack/react-router' {
       path: '/agent/$agentId'
       fullPath: '/agent-inbox/agent/$agentId'
       preLoaderRoute: typeof AppAuthAgentInboxAgentAgentIdImport
-      parentRoute: typeof AppAuthAgentInboxImport
+      parentRoute: typeof AppAuthAgentInboxRouteImport
+    }
+    '/_app/_auth/agent-inbox/conversation/$conversationId': {
+      id: '/_app/_auth/agent-inbox/conversation/$conversationId'
+      path: '/conversation/$conversationId'
+      fullPath: '/agent-inbox/conversation/$conversationId'
+      preLoaderRoute: typeof AppAuthAgentInboxConversationConversationIdImport
+      parentRoute: typeof AppAuthAgentInboxRouteImport
     }
     '/_app/_auth/dashboard/_layout/checkout': {
       id: '/_app/_auth/dashboard/_layout/checkout'
@@ -426,13 +433,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/onboarding/username'
       preLoaderRoute: typeof AppAuthOnboardingLayoutUsernameImport
       parentRoute: typeof AppAuthOnboardingLayoutImport
-    }
-    '/_app/_auth/agent-inbox/_layout/': {
-      id: '/_app/_auth/agent-inbox/_layout/'
-      path: '/'
-      fullPath: '/agent-inbox/'
-      preLoaderRoute: typeof AppAuthAgentInboxLayoutIndexImport
-      parentRoute: typeof AppAuthAgentInboxLayoutImport
     }
     '/_app/_auth/dashboard/_layout/': {
       id: '/_app/_auth/dashboard/_layout/'
@@ -513,11 +513,10 @@ export const routeTree = rootRoute.addChildren({
   IndexRoute,
   AppRoute: AppRoute.addChildren({
     AppAuthRoute: AppAuthRoute.addChildren({
-      AppAuthAgentInboxRoute: AppAuthAgentInboxRoute.addChildren({
-        AppAuthAgentInboxLayoutRoute: AppAuthAgentInboxLayoutRoute.addChildren({
-          AppAuthAgentInboxLayoutIndexRoute,
-        }),
+      AppAuthAgentInboxRouteRoute: AppAuthAgentInboxRouteRoute.addChildren({
+        AppAuthAgentInboxIndexRoute,
         AppAuthAgentInboxAgentAgentIdRoute,
+        AppAuthAgentInboxConversationConversationIdRoute,
       }),
       AppAuthDashboardRoute: AppAuthDashboardRoute.addChildren({
         AppAuthDashboardLayoutRoute: AppAuthDashboardLayoutRoute.addChildren({
@@ -611,6 +610,15 @@ export const routeTree = rootRoute.addChildren({
         "/_app/_auth/stories/$storyId/refine"
       ]
     },
+    "/_app/_auth/agent-inbox": {
+      "filePath": "_app/_auth/agent-inbox/route.tsx",
+      "parent": "/_app/_auth",
+      "children": [
+        "/_app/_auth/agent-inbox/",
+        "/_app/_auth/agent-inbox/agent/$agentId",
+        "/_app/_auth/agent-inbox/conversation/$conversationId"
+      ]
+    },
     "/_app/login": {
       "filePath": "_app/login",
       "parent": "/_app",
@@ -623,21 +631,6 @@ export const routeTree = rootRoute.addChildren({
       "parent": "/_app/login",
       "children": [
         "/_app/login/_layout/"
-      ]
-    },
-    "/_app/_auth/agent-inbox": {
-      "filePath": "_app/_auth/agent-inbox",
-      "parent": "/_app/_auth",
-      "children": [
-        "/_app/_auth/agent-inbox/_layout",
-        "/_app/_auth/agent-inbox/agent/$agentId"
-      ]
-    },
-    "/_app/_auth/agent-inbox/_layout": {
-      "filePath": "_app/_auth/agent-inbox/_layout.tsx",
-      "parent": "/_app/_auth/agent-inbox",
-      "children": [
-        "/_app/_auth/agent-inbox/_layout/"
       ]
     },
     "/_app/_auth/dashboard": {
@@ -712,12 +705,20 @@ export const routeTree = rootRoute.addChildren({
         "/_app/_auth/video-to-markdown/_layout/"
       ]
     },
+    "/_app/_auth/agent-inbox/": {
+      "filePath": "_app/_auth/agent-inbox/index.tsx",
+      "parent": "/_app/_auth/agent-inbox"
+    },
     "/_app/login/_layout/": {
       "filePath": "_app/login/_layout.index.tsx",
       "parent": "/_app/login/_layout"
     },
     "/_app/_auth/agent-inbox/agent/$agentId": {
       "filePath": "_app/_auth/agent-inbox/agent/$agentId.tsx",
+      "parent": "/_app/_auth/agent-inbox"
+    },
+    "/_app/_auth/agent-inbox/conversation/$conversationId": {
+      "filePath": "_app/_auth/agent-inbox/conversation/$conversationId.tsx",
       "parent": "/_app/_auth/agent-inbox"
     },
     "/_app/_auth/dashboard/_layout/checkout": {
@@ -749,10 +750,6 @@ export const routeTree = rootRoute.addChildren({
     "/_app/_auth/onboarding/_layout/username": {
       "filePath": "_app/_auth/onboarding/_layout.username.tsx",
       "parent": "/_app/_auth/onboarding/_layout"
-    },
-    "/_app/_auth/agent-inbox/_layout/": {
-      "filePath": "_app/_auth/agent-inbox/_layout.index.tsx",
-      "parent": "/_app/_auth/agent-inbox/_layout"
     },
     "/_app/_auth/dashboard/_layout/": {
       "filePath": "_app/_auth/dashboard/_layout.index.tsx",

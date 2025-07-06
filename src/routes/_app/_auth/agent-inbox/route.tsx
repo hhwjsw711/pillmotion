@@ -9,7 +9,7 @@ const agentInboxSearchSchema = z.object({
   tab: z.enum(["conversations", "agents"]).default("conversations"),
 });
 
-export const Route = createFileRoute("/_app/_auth/agent-inbox/_layout")({
+export const Route = createFileRoute("/_app/_auth/agent-inbox")({
   component: AgentInboxLayout,
   validateSearch: agentInboxSearchSchema,
 });
