@@ -6,12 +6,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { convexQuery, useConvexMutation } from "@convex-dev/react-query";
 import { AgentAvatar } from "@/ui/agent-avatar";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Id } from "@cvx/_generated/dataModel";
+import { Id } from "~/convex/_generated/dataModel";
 import { Route as AgentRoute } from "@/routes/_app/_auth/agent-inbox/agent/$agentId";
+import { Skeleton } from "@/ui/skeleton";
 
 export const AgentList = () => {
   const agentListQuery = convexQuery(api.agents.queries.listMine, {});
-  const { data: agents } = useQuery(agentListQuery);
+  const { data: agents, isLoading, isError } = useQuery(agentListQuery);
 
   const onApiError = useApiErrorHandler();
   const navigate = useNavigate();
@@ -25,6 +26,7 @@ export const AgentList = () => {
       navigate({
         to: AgentRoute.to,
         params: { agentId: agentId as Id<"agents"> },
+        search: true,
       });
     },
     onError: onApiError,
@@ -54,30 +56,44 @@ export const AgentList = () => {
         </Button>
       </div>
       <div className="flex-1 overflow-y-auto">
-        {agents?.map((agent) => (
-          <Link
-            key={agent._id}
-            to={AgentRoute.to}
-            params={{ agentId: agent._id }}
-            search={true}
-            className="p-4 hover:bg-accent flex items-center gap-3"
-            activeProps={{ className: "bg-accent" }}
-          >
-            <AgentAvatar
-              size="sm"
-              avatarUrl={agent.avatarUrl}
-              name={agent.name}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="font-medium text-foreground truncate">
-                {agent.name}
+        {isLoading && (
+          <div className="p-4 space-y-4">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        )}
+        {isError && (
+          <div className="p-4 text-sm text-destructive">
+            Failed to load agents.
+          </div>
+        )}
+        {!isLoading &&
+          !isError &&
+          agents?.map((agent) => (
+            <Link
+              key={agent._id}
+              to={AgentRoute.to}
+              params={{ agentId: agent._id }}
+              search={true}
+              className="p-4 hover:bg-accent flex items-center gap-3"
+              activeProps={{ className: "bg-accent" }}
+            >
+              <AgentAvatar
+                size="sm"
+                avatarUrl={agent.avatarUrl}
+                name={agent.name}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-foreground truncate">
+                  {agent.name}
+                </div>
+                <div className="text-sm text-muted-foreground truncate">
+                  {agent.description}
+                </div>
               </div>
-              <div className="text-sm text-muted-foreground truncate">
-                {agent.description}
-              </div>
-            </div>
-          </Link>
-        ))}
+            </Link>
+          ))}
       </div>
     </>
   );

@@ -7,6 +7,7 @@ import { Plus, Loader2 } from "lucide-react";
 import { useApiErrorHandler } from "@/hooks/useApiErrorHandler";
 import { Button } from "@/ui/button";
 import { Route as ConversationRoute } from "@/routes/_app/_auth/agent-inbox/conversation/$conversationId";
+import { Skeleton } from "@/ui/skeleton";
 
 const DEFAULT_THREAD_TITLE = "New Conversation";
 
@@ -19,7 +20,11 @@ export const ConversationList = () => {
     api.conversations.queries.listMine,
     {},
   );
-  const { data: conversations } = useQuery(conversationsQuery);
+  const {
+    data: conversations,
+    isLoading,
+    isError,
+  } = useQuery(conversationsQuery);
 
   const createConversation = useMutation({
     mutationFn: useConvexMutation(api.conversations.mutations.create),
@@ -56,23 +61,39 @@ export const ConversationList = () => {
         </Button>
       </div>
       <div className="flex-1 overflow-y-auto">
-        {conversations?.map((conversation) => (
-          <Link
-            key={conversation._id}
-            to={ConversationRoute.to}
-            params={{ conversationId: conversation._id }}
-            search={true}
-            className="block p-4 cursor-pointer hover:bg-accent"
-            activeProps={{ className: "bg-accent" }}
-          >
-            <div className="font-medium text-foreground truncate">
-              {conversation.title}
-            </div>
-            <div className="text-sm text-muted-foreground/80 truncate">
-              {new Date(conversation._creationTime).toLocaleTimeString()}
-            </div>
-          </Link>
-        ))}
+        {isLoading && (
+          // 显示一个骨架屏加载动画
+          <div className="p-4 space-y-4">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        )}
+        {isError && (
+          // 显示错误信息
+          <div className="p-4 text-sm text-destructive">
+            Failed to load conversations.
+          </div>
+        )}
+        {!isLoading &&
+          !isError &&
+          conversations?.map((conversation) => (
+            <Link
+              key={conversation._id}
+              to={ConversationRoute.to}
+              params={{ conversationId: conversation._id }}
+              search={true}
+              className="block p-4 cursor-pointer hover:bg-accent"
+              activeProps={{ className: "bg-accent" }}
+            >
+              <div className="font-medium text-foreground truncate">
+                {conversation.title}
+              </div>
+              <div className="text-sm text-muted-foreground/80 truncate">
+                {new Date(conversation._creationTime).toLocaleTimeString()}
+              </div>
+            </Link>
+          ))}
       </div>
     </>
   );

@@ -29,7 +29,9 @@ export const AgentProfile = ({ agentId }: { agentId: Id<"agents"> }) => {
   const updateAgent = useMutation({
     mutationFn: useConvexMutation(api.agents.mutations.updateMine),
     onSuccess: () => {
+      // Invalidate both the specific agent query and the list query
       queryClient.invalidateQueries({ queryKey: agentQuery.queryKey });
+      queryClient.invalidateQueries({ queryKey: agentListQuery.queryKey });
     },
     onError: onApiError,
     onSettled: () => {
