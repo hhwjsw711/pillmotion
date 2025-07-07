@@ -1,0 +1,160 @@
+"use node";
+
+import { internalAction } from "./_generated/server";
+import { v } from "convex/values";
+import { api, internal } from "./_generated/api";
+import OpenAI, { toFile } from "openai";
+import sharp from "sharp";
+
+if (!process.env.OPENAI_API_KEY)
+  throw new Error(
+    `OPENAI_API_KEY is not set, please 'bun convex env set OPEN_API_KEY <your-key>'`,
+  );
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+export const generateDecoratedImage = internalAction({
+  args: {
+    imageId: v.id("images"),
+    image: v.object({ url: v.string(), storageId: v.id("_storage") }),
+    prompt: v.string(),
+    shouldDeletePreviousDecorated: v.optional(v.boolean()),
+  },
+  handler: async (
+    ctx,
+    { imageId, image, prompt, shouldDeletePreviousDecorated = false },
+  ) => {
+    console.log(`[generateDecoratedImage] Starting for image`, {
+      imageId,
+      image,
+      prompt,
+    });
+
+    const response = await fetch(image.url);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch uploaded image from storage: ${response.statusText}`,
+      );
+    }
+
+    // Convert response to a File object for OpenAI
+    const buffer = await response.arrayBuffer();
+    const file = await toFile(Buffer.from(buffer), "image.png", {
+      type: response.headers.get("content-type") || "image/png",
+    });
+
+    // Call OpenAI image edit endpoint
+    console.log(
+      `[generateDecoratedImage] Calling OpenAI image edit endpoint with prompt: ${prompt}`,
+    );
+    const editResponse = await openai.images.edit({
+      image: file,
+      model: "gpt-image-1",
+      prompt,
+      n: 1,
+    });
+
+    // Log token usage and cost if available
+    if (editResponse.usage) {
+      const { input_tokens, output_tokens, input_tokens_details } =
+        editResponse.usage;
+      const textTokens = input_tokens_details?.text_tokens ?? 0;
+      const imageTokens = input_tokens_details?.image_tokens ?? 0;
+      const textCost = textTokens * 0.000005;
+      const imageCost = imageTokens * 0.00001;
+      const outputCost = output_tokens * 0.00004;
+      const totalCost = textCost + imageCost + outputCost;
+      console.log(
+        `[generateDecoratedImage] Token usage: input_tokens=${input_tokens} (text=${textTokens}, image=${imageTokens}), output_tokens=${output_tokens}`,
+      );
+      console.log(
+        `[generateDecoratedImage] Cost: text_input=$${textCost.toFixed(6)}, image_input=$${imageCost.toFixed(6)}, output=$${outputCost.toFixed(6)}, total=$${totalCost.toFixed(6)}`,
+      );
+    } else {
+      console.warn(
+        "[generateDecoratedImage] No usage info returned from OpenAI response; cannot log token usage or cost.",
+      );
+    }
+
+    if (!editResponse.data || !editResponse.data[0].b64_json)
+      throw new Error("No image data returned from OpenAI image edit endpoint");
+
+    // Store the generated image in Convex storage
+    console.log(
+      `[generateDecoratedImage] Storing generated image in Convex storage`,
+    );
+    const base64ToUint8Array = (base64: string): Uint8Array => {
+      const binaryString = globalThis.atob(base64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+      return bytes;
+    };
+    const bytes = base64ToUint8Array(editResponse.data[0].b64_json);
+
+    // Resize and convert to webp using helper
+    let webpBuffer: Buffer;
+    try {
+      webpBuffer = await resizeAndConvertToWebp(Buffer.from(bytes));
+    } catch (err) {
+      throw new Error(`Failed to resize/convert image to webp: ${err}`);
+    }
+    const webpBlob = new Blob([webpBuffer], { type: "image/webp" });
+    const storageId = await ctx.storage.store(webpBlob);
+    const url = await ctx.storage.getUrl(storageId);
+    if (!url) throw new Error("Failed to get storage URL after upload");
+
+    try {
+      // Get the current image record to ensure we have the original image reference
+      const currentImage = await ctx.runQuery(api.images.getImage, { imageId });
+      if (!currentImage) {
+        throw new Error(`Could not find image for imageId '${imageId}'`);
+      }
+
+      // Ensure we have the original image reference
+      let originalImage;
+      if (
+        currentImage.status.kind === "uploaded" ||
+        currentImage.status.kind === "generating" ||
+        currentImage.status.kind === "generated"
+      ) {
+        originalImage = currentImage.status.image;
+      }
+
+      if (!originalImage) {
+        throw new Error(
+          `Could not find original image for imageId '${imageId}' - status: ${currentImage.status.kind}`,
+        );
+      }
+
+      await ctx.runMutation(internal.images.finishGeneration, {
+        imageId,
+        image: originalImage, // Always use the original image reference
+        decoratedImage: { url, storageId },
+        prompt,
+      });
+
+      // If we used the decorated image as base, delete it now that we have a new one
+      if (shouldDeletePreviousDecorated && image.storageId) {
+        await ctx.storage.delete(image.storageId);
+      }
+    } catch (e) {
+      console.error(e);
+      await ctx.storage.delete(storageId);
+    }
+
+    console.log(`[generateDecoratedImage] Done for imageId: ${imageId}`);
+  },
+});
+
+/**
+ * Resize and convert an image buffer to webp format, max 2048x2048.
+ * @param inputBuffer - The input image buffer (PNG, JPEG, etc)
+ * @returns Promise<Buffer> - The processed webp image buffer
+ */
+async function resizeAndConvertToWebp(inputBuffer: Buffer): Promise<Buffer> {
+  return sharp(inputBuffer)
+    .resize(2048, 2048, { fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 92 })
+    .toBuffer();
+}

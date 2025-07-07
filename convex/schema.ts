@@ -5,6 +5,12 @@ import { agentsSchemaValidator } from "./agents/schema";
 import { conversationParticipantsTable } from "./conversationParticipants/schema";
 import { conversationMessagesTable } from "./conversationMessages/schema";
 
+// Extracted validator for an image object with url and storageId
+const imageObject = v.object({
+  url: v.string(),
+  storageId: v.id("_storage"),
+});
+
 export const CURRENCIES = {
   USD: "usd",
   EUR: "eur",
@@ -97,6 +103,29 @@ const schema = defineSchema({
   })
     .index("userId", ["userId"])
     .index("stripeId", ["stripeId"]),
+  images: defineTable({
+    userId: v.id("users"),
+    status: v.union(
+      v.object({
+        kind: v.literal("uploading"),
+      }),
+      v.object({
+        kind: v.literal("uploaded"),
+        image: imageObject,
+      }),
+      v.object({
+        kind: v.literal("generating"),
+        image: imageObject,
+        prompt: v.string(),
+      }),
+      v.object({
+        kind: v.literal("generated"),
+        image: imageObject,
+        decoratedImage: imageObject,
+        prompt: v.string(),
+      }),
+    ),
+  }).index("by_user", ["userId"]),
   videos: defineTable({
     url: v.string(), // Original YouTube URL
     videoId: v.string(), // Extracted YouTube video ID
