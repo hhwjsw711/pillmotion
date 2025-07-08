@@ -12,4 +12,8 @@ export default defineConfig({
       "@cvx": path.resolve(__dirname, "./convex"),
     },
   },
+  server: {
+    host: "0.0.0.0", // 监听所有地址，包括局域网
+    port: 5173,
+  },
 });

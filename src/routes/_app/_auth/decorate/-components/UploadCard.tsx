@@ -1,7 +1,8 @@
 import { Card } from "@/ui/card";
-import React from "react";
+import React, { useRef } from "react";
 import { isMobile } from "@/utils/misc";
 import { Loader2 } from "lucide-react";
+import { Button } from "./Button";
 
 interface UploadCardProps {
   onUpload: (file: File) => void;
@@ -17,6 +18,7 @@ export function UploadCard({
   isUploading,
 }: UploadCardProps) {
   const mobile = isMobile();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   return (
     <Card
@@ -63,29 +65,28 @@ export function UploadCard({
           </p>
           <div className={`mt-2 ${mobile ? "flex flex-col gap-2" : ""}`}>
             {/* Gallery/File picker */}
-            <label className="inline-block">
-              <input
-                type="file"
-                className="hidden"
-                accept="image/*"
-                multiple={false}
-                disabled={isUploading}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  onUpload(file);
-                }}
-              />
-              <span
-                className={`button px-6 py-2 ${
-                  isUploading
-                    ? "opacity-50 cursor-not-allowed"
-                    : "cursor-pointer"
-                }`}
-              >
-                Select a file
-              </span>
-            </label>
+            <input
+              ref={inputRef}
+              type="file"
+              className="hidden"
+              accept="image/*"
+              multiple={false}
+              disabled={isUploading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                onUpload(file);
+              }}
+            />
+            <Button
+              variant="primary"
+              disabled={isUploading}
+              onClick={() => {
+                inputRef.current?.click();
+              }}
+            >
+              Select a file
+            </Button>
           </div>
         </div>
       </div>

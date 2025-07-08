@@ -1,8 +1,9 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
-import { Navigation } from "../-components/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
 import { api } from "@cvx/_generated/api";
+import { AppHeader } from "./-components/AppHeader";
+import { BottomNav } from "./-components/BottomNav";
 
 export const Route = createFileRoute("/_app/_auth/decorate")({
   component: DecorateLayout,
@@ -15,8 +16,9 @@ function DecorateLayout() {
   }
   return (
     <div className="flex min-h-[100vh] w-full flex-col bg-secondary dark:bg-black">
-      <Navigation user={user} />
+      <AppHeader />
       <Outlet />
+      <BottomNav />
     </div>
   );
 }

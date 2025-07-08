@@ -9,7 +9,7 @@ import { Helmet } from "react-helmet-async";
 import { Toaster } from "@/ui/sonner";
 
 const TanStackRouterDevtools =
-  process.env.NODE_ENV === "production"
+  process.env.NODE_ENV === "development"
     ? () => null // Render nothing in production
     : React.lazy(() =>
         // Lazy load in development
