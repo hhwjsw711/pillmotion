@@ -19,11 +19,13 @@ import { Route as AppAuthImport } from './routes/_app/_auth'
 import { Route as AppLoginLayoutImport } from './routes/_app/login/_layout'
 import { Route as AppAuthOurfilesRouteImport } from './routes/_app/_auth/ourfiles/route'
 import { Route as AppAuthEmbeddingSoupRouteImport } from './routes/_app/_auth/embedding-soup/route'
+import { Route as AppAuthDocumentsRouteImport } from './routes/_app/_auth/documents/route'
 import { Route as AppAuthDecorateRouteImport } from './routes/_app/_auth/decorate/route'
 import { Route as AppAuthAgentInboxRouteImport } from './routes/_app/_auth/agent-inbox/route'
 import { Route as AppLoginLayoutIndexImport } from './routes/_app/login/_layout.index'
 import { Route as AppAuthOurfilesIndexImport } from './routes/_app/_auth/ourfiles/index'
 import { Route as AppAuthEmbeddingSoupIndexImport } from './routes/_app/_auth/embedding-soup/index'
+import { Route as AppAuthDocumentsIndexImport } from './routes/_app/_auth/documents/index'
 import { Route as AppAuthDecorateIndexImport } from './routes/_app/_auth/decorate/index'
 import { Route as AppAuthAgentInboxIndexImport } from './routes/_app/_auth/agent-inbox/index'
 import { Route as AppAuthVideoToMarkdownLayoutImport } from './routes/_app/_auth/video-to-markdown/_layout'
@@ -129,6 +131,11 @@ const AppAuthEmbeddingSoupRouteRoute = AppAuthEmbeddingSoupRouteImport.update({
   getParentRoute: () => AppAuthRoute,
 } as any)
 
+const AppAuthDocumentsRouteRoute = AppAuthDocumentsRouteImport.update({
+  path: '/documents',
+  getParentRoute: () => AppAuthRoute,
+} as any)
+
 const AppAuthDecorateRouteRoute = AppAuthDecorateRouteImport.update({
   path: '/decorate',
   getParentRoute: () => AppAuthRoute,
@@ -157,6 +164,11 @@ const AppAuthOurfilesIndexRoute = AppAuthOurfilesIndexImport.update({
 const AppAuthEmbeddingSoupIndexRoute = AppAuthEmbeddingSoupIndexImport.update({
   path: '/',
   getParentRoute: () => AppAuthEmbeddingSoupRouteRoute,
+} as any)
+
+const AppAuthDocumentsIndexRoute = AppAuthDocumentsIndexImport.update({
+  path: '/',
+  getParentRoute: () => AppAuthDocumentsRouteRoute,
 } as any)
 
 const AppAuthDecorateIndexRoute = AppAuthDecorateIndexImport.update({
@@ -337,6 +349,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAuthDecorateRouteImport
       parentRoute: typeof AppAuthImport
     }
+    '/_app/_auth/documents': {
+      id: '/_app/_auth/documents'
+      path: '/documents'
+      fullPath: '/documents'
+      preLoaderRoute: typeof AppAuthDocumentsRouteImport
+      parentRoute: typeof AppAuthImport
+    }
     '/_app/_auth/embedding-soup': {
       id: '/_app/_auth/embedding-soup'
       path: '/embedding-soup'
@@ -448,6 +467,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/decorate/'
       preLoaderRoute: typeof AppAuthDecorateIndexImport
       parentRoute: typeof AppAuthDecorateRouteImport
+    }
+    '/_app/_auth/documents/': {
+      id: '/_app/_auth/documents/'
+      path: '/'
+      fullPath: '/documents/'
+      preLoaderRoute: typeof AppAuthDocumentsIndexImport
+      parentRoute: typeof AppAuthDocumentsRouteImport
     }
     '/_app/_auth/embedding-soup/': {
       id: '/_app/_auth/embedding-soup/'
@@ -614,6 +640,9 @@ export const routeTree = rootRoute.addChildren({
         AppAuthDecorateIndexRoute,
         AppAuthDecorateImageImageIdRoute,
       }),
+      AppAuthDocumentsRouteRoute: AppAuthDocumentsRouteRoute.addChildren({
+        AppAuthDocumentsIndexRoute,
+      }),
       AppAuthEmbeddingSoupRouteRoute:
         AppAuthEmbeddingSoupRouteRoute.addChildren({
           AppAuthEmbeddingSoupIndexRoute,
@@ -705,6 +734,7 @@ export const routeTree = rootRoute.addChildren({
       "children": [
         "/_app/_auth/agent-inbox",
         "/_app/_auth/decorate",
+        "/_app/_auth/documents",
         "/_app/_auth/embedding-soup",
         "/_app/_auth/ourfiles",
         "/_app/_auth/dashboard",
@@ -731,6 +761,13 @@ export const routeTree = rootRoute.addChildren({
       "children": [
         "/_app/_auth/decorate/",
         "/_app/_auth/decorate/image/$imageId"
+      ]
+    },
+    "/_app/_auth/documents": {
+      "filePath": "_app/_auth/documents/route.tsx",
+      "parent": "/_app/_auth",
+      "children": [
+        "/_app/_auth/documents/"
       ]
     },
     "/_app/_auth/embedding-soup": {
@@ -840,6 +877,10 @@ export const routeTree = rootRoute.addChildren({
     "/_app/_auth/decorate/": {
       "filePath": "_app/_auth/decorate/index.tsx",
       "parent": "/_app/_auth/decorate"
+    },
+    "/_app/_auth/documents/": {
+      "filePath": "_app/_auth/documents/index.tsx",
+      "parent": "/_app/_auth/documents"
     },
     "/_app/_auth/embedding-soup/": {
       "filePath": "_app/_auth/embedding-soup/index.tsx",

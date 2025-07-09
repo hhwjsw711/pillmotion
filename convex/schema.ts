@@ -4,6 +4,7 @@ import { v, Infer } from "convex/values";
 import { agentsSchemaValidator } from "./agents/schema";
 import { conversationParticipantsTable } from "./conversationParticipants/schema";
 import { conversationMessagesTable } from "./conversationMessages/schema";
+import { vEntryId } from "@convex-dev/rag";
 
 // Extracted validator for an image object with url and storageId
 const imageObject = v.object({
@@ -214,6 +215,16 @@ const schema = defineSchema({
     vectorField: "embedding",
     dimensions: 1536, // OpenAI's text-embedding-3-small model dimensions
   }),
+  fileMetadata: defineTable({
+    entryId: vEntryId,
+    filename: v.string(),
+    storageId: v.id("_storage"),
+    global: v.boolean(),
+    category: v.optional(v.string()),
+    uploadedBy: v.string(),
+  })
+    .index("global_category", ["global", "category"])
+    .index("entryId", ["entryId"]),
 });
 
 export default schema;

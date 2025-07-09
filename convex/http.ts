@@ -13,8 +13,33 @@ import {
 } from "@cvx/email/templates/subscriptionEmail";
 import Stripe from "stripe";
 import { Doc } from "@cvx/_generated/dataModel";
+import { addFileAsync } from "./documents";
+import { corsRouter } from "convex-helpers/server/cors";
 
 const http = httpRouter();
+
+const cors = corsRouter(http, {
+  allowedHeaders: [
+    "x-filename",
+    "x-category",
+    "x-global-namespace",
+    "Content-Type",
+  ],
+});
+
+cors.route({
+  path: "/upload",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    await addFileAsync(ctx, {
+      globalNamespace: Boolean(request.headers.get("x-global-namespace")),
+      filename: request.headers.get("x-filename")!,
+      blob: await request.blob(),
+      category: request.headers.get("x-category") || null,
+    });
+    return new Response();
+  }),
+});
 
 /**
  * Gets and constructs a Stripe event signature.
@@ -190,7 +215,7 @@ const handleCustomerSubscriptionDeleted = async (
   return new Response(null);
 };
 
-http.route({
+cors.route({
   path: "/stripe/webhook",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
@@ -240,4 +265,4 @@ http.route({
 
 auth.addHttpRoutes(http);
 
-export default http;
+export default cors.http;
