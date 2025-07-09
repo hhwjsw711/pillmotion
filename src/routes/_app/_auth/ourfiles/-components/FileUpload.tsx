@@ -9,7 +9,6 @@ import { Id } from "~/convex/_generated/dataModel";
 import { TopRightItems } from "./TopRightItems";
 import { MultiSelectOverlay } from "./MultiSelectOverlay";
 import { DeleteFileDialog } from "./DeleteFileDialog";
-import { Toaster } from "@/ui/sonner";
 import { useQuery } from "convex/react";
 import { api } from "~/convex/_generated/api";
 import {
@@ -148,7 +147,6 @@ export const FileUpload: React.FC = () => {
           fileCount={selectedFileIds.size}
         />
       </div>
-      <Toaster />
     </>
   );
 };

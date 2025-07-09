@@ -52,6 +52,7 @@ import type * as images from "../images.js";
 import type * as init from "../init.js";
 import type * as otp_ResendOTP from "../otp/ResendOTP.js";
 import type * as otp_VerificationCodeEmail from "../otp/VerificationCodeEmail.js";
+import type * as phrases from "../phrases.js";
 import type * as replicate from "../replicate.js";
 import type * as segments from "../segments.js";
 import type * as story from "../story.js";
@@ -121,6 +122,7 @@ declare const fullApi: ApiFromModules<{
   init: typeof init;
   "otp/ResendOTP": typeof otp_ResendOTP;
   "otp/VerificationCodeEmail": typeof otp_VerificationCodeEmail;
+  phrases: typeof phrases;
   replicate: typeof replicate;
   segments: typeof segments;
   story: typeof story;

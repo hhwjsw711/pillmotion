@@ -207,6 +207,13 @@ const schema = defineSchema({
     .index("by_system_agent_kind", ["systemAgentKind"]),
   conversationParticipants: conversationParticipantsTable,
   conversationMessages: conversationMessagesTable,
+  phrases: defineTable({
+    text: v.string(),
+    embedding: v.array(v.number()),
+  }).vectorIndex("by_embedding", {
+    vectorField: "embedding",
+    dimensions: 1536, // OpenAI's text-embedding-3-small model dimensions
+  }),
 });
 
 export default schema;
