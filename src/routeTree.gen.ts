@@ -17,9 +17,11 @@ import { Route as AppImport } from './routes/_app'
 import { Route as IndexImport } from './routes/index'
 import { Route as AppAuthImport } from './routes/_app/_auth'
 import { Route as AppLoginLayoutImport } from './routes/_app/login/_layout'
+import { Route as AppAuthOurfilesRouteImport } from './routes/_app/_auth/ourfiles/route'
 import { Route as AppAuthDecorateRouteImport } from './routes/_app/_auth/decorate/route'
 import { Route as AppAuthAgentInboxRouteImport } from './routes/_app/_auth/agent-inbox/route'
 import { Route as AppLoginLayoutIndexImport } from './routes/_app/login/_layout.index'
+import { Route as AppAuthOurfilesIndexImport } from './routes/_app/_auth/ourfiles/index'
 import { Route as AppAuthDecorateIndexImport } from './routes/_app/_auth/decorate/index'
 import { Route as AppAuthAgentInboxIndexImport } from './routes/_app/_auth/agent-inbox/index'
 import { Route as AppAuthVideoToMarkdownLayoutImport } from './routes/_app/_auth/video-to-markdown/_layout'
@@ -115,6 +117,11 @@ const AppLoginLayoutRoute = AppLoginLayoutImport.update({
   getParentRoute: () => AppLoginRoute,
 } as any)
 
+const AppAuthOurfilesRouteRoute = AppAuthOurfilesRouteImport.update({
+  path: '/ourfiles',
+  getParentRoute: () => AppAuthRoute,
+} as any)
+
 const AppAuthDecorateRouteRoute = AppAuthDecorateRouteImport.update({
   path: '/decorate',
   getParentRoute: () => AppAuthRoute,
@@ -133,6 +140,11 @@ const AppAuthGenerateGuidedRoute = AppAuthGenerateGuidedImport.update({
 const AppLoginLayoutIndexRoute = AppLoginLayoutIndexImport.update({
   path: '/',
   getParentRoute: () => AppLoginLayoutRoute,
+} as any)
+
+const AppAuthOurfilesIndexRoute = AppAuthOurfilesIndexImport.update({
+  path: '/',
+  getParentRoute: () => AppAuthOurfilesRouteRoute,
 } as any)
 
 const AppAuthDecorateIndexRoute = AppAuthDecorateIndexImport.update({
@@ -313,6 +325,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAuthDecorateRouteImport
       parentRoute: typeof AppAuthImport
     }
+    '/_app/_auth/ourfiles': {
+      id: '/_app/_auth/ourfiles'
+      path: '/ourfiles'
+      fullPath: '/ourfiles'
+      preLoaderRoute: typeof AppAuthOurfilesRouteImport
+      parentRoute: typeof AppAuthImport
+    }
     '/_app/login': {
       id: '/_app/login'
       path: '/login'
@@ -410,6 +429,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/decorate/'
       preLoaderRoute: typeof AppAuthDecorateIndexImport
       parentRoute: typeof AppAuthDecorateRouteImport
+    }
+    '/_app/_auth/ourfiles/': {
+      id: '/_app/_auth/ourfiles/'
+      path: '/'
+      fullPath: '/ourfiles/'
+      preLoaderRoute: typeof AppAuthOurfilesIndexImport
+      parentRoute: typeof AppAuthOurfilesRouteImport
     }
     '/_app/login/_layout/': {
       id: '/_app/login/_layout/'
@@ -562,6 +588,9 @@ export const routeTree = rootRoute.addChildren({
         AppAuthDecorateIndexRoute,
         AppAuthDecorateImageImageIdRoute,
       }),
+      AppAuthOurfilesRouteRoute: AppAuthOurfilesRouteRoute.addChildren({
+        AppAuthOurfilesIndexRoute,
+      }),
       AppAuthDashboardRoute: AppAuthDashboardRoute.addChildren({
         AppAuthDashboardLayoutRoute: AppAuthDashboardLayoutRoute.addChildren({
           AppAuthDashboardLayoutCheckoutRoute,
@@ -646,6 +675,7 @@ export const routeTree = rootRoute.addChildren({
       "children": [
         "/_app/_auth/agent-inbox",
         "/_app/_auth/decorate",
+        "/_app/_auth/ourfiles",
         "/_app/_auth/dashboard",
         "/_app/_auth/image-editing",
         "/_app/_auth/image-generation",
@@ -670,6 +700,13 @@ export const routeTree = rootRoute.addChildren({
       "children": [
         "/_app/_auth/decorate/",
         "/_app/_auth/decorate/image/$imageId"
+      ]
+    },
+    "/_app/_auth/ourfiles": {
+      "filePath": "_app/_auth/ourfiles/route.tsx",
+      "parent": "/_app/_auth",
+      "children": [
+        "/_app/_auth/ourfiles/"
       ]
     },
     "/_app/login": {
@@ -765,6 +802,10 @@ export const routeTree = rootRoute.addChildren({
     "/_app/_auth/decorate/": {
       "filePath": "_app/_auth/decorate/index.tsx",
       "parent": "/_app/_auth/decorate"
+    },
+    "/_app/_auth/ourfiles/": {
+      "filePath": "_app/_auth/ourfiles/index.tsx",
+      "parent": "/_app/_auth/ourfiles"
     },
     "/_app/login/_layout/": {
       "filePath": "_app/login/_layout.index.tsx",
