@@ -19,7 +19,6 @@ import {
 } from "@/ui/dropdown-menu";
 import { Button } from "@/ui/button";
 import { buttonVariants } from "@/ui/button-util";
-import { Logo } from "@/ui/logo";
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
 import { Route as DashboardRoute } from "@/routes/_app/_auth/dashboard/_layout.index";
 import { Route as SettingsRoute } from "@/routes/_app/_auth/dashboard/_layout.settings.index";
@@ -47,7 +46,13 @@ export function Navigation({ user }: { user: User }) {
             to={DashboardRoute.fullPath}
             className="flex h-10 items-center gap-1"
           >
-            <Logo />
+            <img
+              className="rounded-lg"
+              src={`/images/pillmotion-logo.jpg`}
+              width="35"
+              height="35"
+              alt="icon"
+            />
           </Link>
           <Slash className="h-6 w-6 -rotate-12 stroke-[1.5px] text-primary/10" />
           <DropdownMenu modal={false}>

@@ -1,5 +1,4 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
-import { Logo } from "@/ui/logo";
 import { useConvexAuth } from "convex/react";
 
 const HOME_PATH = "/";
@@ -46,12 +45,24 @@ function LoginLayout() {
           to={HOME_PATH}
           className="z-10 flex h-10 flex-col items-center justify-center gap-2"
         >
-          <Logo />
+          <img
+            className="rounded-lg"
+            src={`/images/pillmotion-logo.jpg`}
+            width="35"
+            height="35"
+            alt="icon"
+          />
         </Link>
       </div>
       <div className="relative hidden h-full w-[50%] flex-col justify-between overflow-hidden bg-card p-10 lg:flex">
         <Link to={HOME_PATH} className="z-10 flex h-10 w-10 items-center gap-1">
-          <Logo />
+          <img
+            className="rounded-lg"
+            src={`/images/pillmotion-logo.jpg`}
+            width="35"
+            height="35"
+            alt="icon"
+          />
         </Link>
 
         <div className="z-10 flex flex-col items-start gap-2">

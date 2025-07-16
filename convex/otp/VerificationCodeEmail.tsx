@@ -22,7 +22,7 @@ export function VerificationCodeEmail({
         <Container className="container px-20 font-sans">
           <Heading className="text-xl font-bold mb-4">
             {/* TODO: Update with your app name */}
-            Sign in to Convex SaaS
+            Sign in to Pillmotion
           </Heading>
           <Text className="text-sm">
             Please enter the following code on the sign in page.

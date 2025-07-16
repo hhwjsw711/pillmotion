@@ -1,5 +1,4 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
-import { Logo } from "@/ui/logo";
 
 export const Route = createFileRoute("/_app/_auth/onboarding/_layout")({
   component: OnboardingLayout,
@@ -9,7 +8,13 @@ export default function OnboardingLayout() {
   return (
     <div className="relative flex h-screen w-full bg-card">
       <div className="absolute left-1/2 top-8 mx-auto -translate-x-1/2 transform justify-center">
-        <Logo />
+        <img
+          className="rounded-lg"
+          src={`/images/pillmotion-logo.jpg`}
+          width="35"
+          height="35"
+          alt="icon"
+        />
       </div>
       <div className="z-10 h-screen w-screen">
         <Outlet />

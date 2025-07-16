@@ -27,7 +27,7 @@ export const Route = createRootRouteWithContext<{
     const matchWithTitle = [...router.state.matches]
       .reverse()
       .find((d) => d.routeContext?.title);
-    const title = matchWithTitle?.routeContext.title || "Convex SaaS";
+    const title = matchWithTitle?.routeContext.title || "Pillmotion";
 
     return (
       <>

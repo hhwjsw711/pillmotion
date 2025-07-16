@@ -1,5 +1,4 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Logo } from "../ui/logo";
 import { cn } from "@/utils/misc";
 import { buttonVariants } from "@/ui/button-util";
 import { Loader2, Star } from "lucide-react";
@@ -23,7 +22,13 @@ function Index() {
       {/* Navigation */}
       <div className="sticky top-0 z-50 mx-auto flex w-full max-w-screen-lg items-center justify-between p-6 py-3">
         <Link to="/" className="flex h-10 items-center gap-1">
-          <Logo />
+          <img
+            className="rounded-lg"
+            src={`/images/pillmotion-logo.jpg`}
+            width="40"
+            height="40"
+            alt="icon"
+          />
         </Link>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-6">
@@ -547,7 +552,7 @@ function Index() {
             Proudly Open Source
           </h1>
           <p className="text-center text-lg text-primary/60">
-            Convex SaaS is a fully Open Source project.
+            Pillmotion is a fully Open Source project.
             <br />
             The code is available on GitHub.
           </p>

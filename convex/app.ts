@@ -167,7 +167,7 @@ export const deleteCurrentUserAccount = mutation({
       );
     }
     await ctx.db.delete(userId);
-    await asyncMap(["resend-otp", "github"], async (provider) => {
+    await asyncMap(["resend-otp", "github", "google"], async (provider) => {
       const authAccount = await ctx.db
         .query("authAccounts")
         .withIndex("userIdAndProvider", (q) =>
