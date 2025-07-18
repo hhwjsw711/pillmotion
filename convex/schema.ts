@@ -96,6 +96,35 @@ const schema = defineSchema({
     checkIntervalDays: v.optional(v.number()), // Current check interval in days (1, 2, 4, 8, 16)
     lastCheckedAt: v.optional(v.number()), // Timestamp of last thumbnail check
   }).index("by_videoId", ["videoId"]),
+  files: defineTable({
+    name: v.string(),
+    size: v.number(),
+    type: v.string(),
+    position: v.object({
+      x: v.number(),
+      y: v.number(),
+    }),
+    uploadState: v.union(
+      v.object({
+        kind: v.literal("created"),
+      }),
+      v.object({
+        kind: v.literal("uploading"),
+        progress: v.number(),
+        lastProgressAt: v.number(),
+        timeoutJobId: v.id("_scheduled_functions"),
+      }),
+      v.object({
+        kind: v.literal("uploaded"),
+        storageId: v.id("_storage"),
+        url: v.string(),
+      }),
+      v.object({
+        kind: v.literal("errored"),
+        message: v.string(),
+      }),
+    ),
+  }),
 });
 
 export default schema;

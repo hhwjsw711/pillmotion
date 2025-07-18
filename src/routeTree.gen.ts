@@ -17,6 +17,7 @@ import { Route as AppImport } from './routes/_app'
 import { Route as IndexImport } from './routes/index'
 import { Route as AppAuthImport } from './routes/_app/_auth'
 import { Route as AppVideoToMarkdownIndexImport } from './routes/_app/video-to-markdown/index'
+import { Route as AppOurfilesIndexImport } from './routes/_app/ourfiles/index'
 import { Route as AppLoginLayoutImport } from './routes/_app/login/_layout'
 import { Route as AppLoginLayoutIndexImport } from './routes/_app/login/_layout.index'
 import { Route as AppAuthOnboardingLayoutImport } from './routes/_app/_auth/onboarding/_layout'
@@ -68,6 +69,11 @@ const AppAuthDashboardRoute = AppAuthDashboardImport.update({
 
 const AppVideoToMarkdownIndexRoute = AppVideoToMarkdownIndexImport.update({
   path: '/video-to-markdown/',
+  getParentRoute: () => AppRoute,
+} as any)
+
+const AppOurfilesIndexRoute = AppOurfilesIndexImport.update({
+  path: '/ourfiles/',
   getParentRoute: () => AppRoute,
 } as any)
 
@@ -165,6 +171,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/login'
       preLoaderRoute: typeof AppLoginLayoutImport
       parentRoute: typeof AppLoginRoute
+    }
+    '/_app/ourfiles/': {
+      id: '/_app/ourfiles/'
+      path: '/ourfiles'
+      fullPath: '/ourfiles'
+      preLoaderRoute: typeof AppOurfilesIndexImport
+      parentRoute: typeof AppImport
     }
     '/_app/video-to-markdown/': {
       id: '/_app/video-to-markdown/'
@@ -281,6 +294,7 @@ export const routeTree = rootRoute.addChildren({
         AppLoginLayoutIndexRoute,
       }),
     }),
+    AppOurfilesIndexRoute,
     AppVideoToMarkdownIndexRoute,
   }),
 })
@@ -305,6 +319,7 @@ export const routeTree = rootRoute.addChildren({
       "children": [
         "/_app/_auth",
         "/_app/login",
+        "/_app/ourfiles/",
         "/_app/video-to-markdown/"
       ]
     },
@@ -329,6 +344,10 @@ export const routeTree = rootRoute.addChildren({
       "children": [
         "/_app/login/_layout/"
       ]
+    },
+    "/_app/ourfiles/": {
+      "filePath": "_app/ourfiles/index.tsx",
+      "parent": "/_app"
     },
     "/_app/video-to-markdown/": {
       "filePath": "_app/video-to-markdown/index.tsx",
