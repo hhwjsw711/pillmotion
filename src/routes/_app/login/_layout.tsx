@@ -47,7 +47,7 @@ function LoginLayout() {
         >
           <img
             className="rounded-lg"
-            src={`/images/pillmotion-logo.jpg`}
+            src={`/images/pillmotion-logo.png`}
             width="35"
             height="35"
             alt="icon"
@@ -58,7 +58,7 @@ function LoginLayout() {
         <Link to={HOME_PATH} className="z-10 flex h-10 w-10 items-center gap-1">
           <img
             className="rounded-lg"
-            src={`/images/pillmotion-logo.jpg`}
+            src={`/images/pillmotion-logo.png`}
             width="35"
             height="35"
             alt="icon"

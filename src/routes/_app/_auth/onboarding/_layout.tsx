@@ -10,7 +10,7 @@ export default function OnboardingLayout() {
       <div className="absolute left-1/2 top-8 mx-auto -translate-x-1/2 transform justify-center">
         <img
           className="rounded-lg"
-          src={`/images/pillmotion-logo.jpg`}
+          src={`/images/pillmotion-logo.png`}
           width="35"
           height="35"
           alt="icon"

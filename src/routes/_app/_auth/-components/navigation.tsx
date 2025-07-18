@@ -48,7 +48,7 @@ export function Navigation({ user }: { user: User }) {
           >
             <img
               className="rounded-lg"
-              src={`/images/pillmotion-logo.jpg`}
+              src={`/images/pillmotion-logo.png`}
               width="35"
               height="35"
               alt="icon"

@@ -24,7 +24,7 @@ function Index() {
         <Link to="/" className="flex h-10 items-center gap-1">
           <img
             className="rounded-lg"
-            src={`/images/pillmotion-logo.jpg`}
+            src={`/images/pillmotion-logo.png`}
             width="40"
             height="40"
             alt="icon"
