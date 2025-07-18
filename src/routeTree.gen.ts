@@ -17,9 +17,9 @@ import { Route as AppImport } from './routes/_app'
 import { Route as IndexImport } from './routes/index'
 import { Route as AppAuthImport } from './routes/_app/_auth'
 import { Route as AppVideoToMarkdownIndexImport } from './routes/_app/video-to-markdown/index'
-import { Route as AppOurfilesIndexImport } from './routes/_app/ourfiles/index'
 import { Route as AppLoginLayoutImport } from './routes/_app/login/_layout'
 import { Route as AppLoginLayoutIndexImport } from './routes/_app/login/_layout.index'
+import { Route as AppAuthOurfilesIndexImport } from './routes/_app/_auth/ourfiles/index'
 import { Route as AppAuthOnboardingLayoutImport } from './routes/_app/_auth/onboarding/_layout'
 import { Route as AppAuthDashboardLayoutImport } from './routes/_app/_auth/dashboard/_layout'
 import { Route as AppAuthDashboardLayoutIndexImport } from './routes/_app/_auth/dashboard/_layout.index'
@@ -72,11 +72,6 @@ const AppVideoToMarkdownIndexRoute = AppVideoToMarkdownIndexImport.update({
   getParentRoute: () => AppRoute,
 } as any)
 
-const AppOurfilesIndexRoute = AppOurfilesIndexImport.update({
-  path: '/ourfiles/',
-  getParentRoute: () => AppRoute,
-} as any)
-
 const AppLoginLayoutRoute = AppLoginLayoutImport.update({
   id: '/_layout',
   getParentRoute: () => AppLoginRoute,
@@ -85,6 +80,11 @@ const AppLoginLayoutRoute = AppLoginLayoutImport.update({
 const AppLoginLayoutIndexRoute = AppLoginLayoutIndexImport.update({
   path: '/',
   getParentRoute: () => AppLoginLayoutRoute,
+} as any)
+
+const AppAuthOurfilesIndexRoute = AppAuthOurfilesIndexImport.update({
+  path: '/ourfiles/',
+  getParentRoute: () => AppAuthRoute,
 } as any)
 
 const AppAuthOnboardingLayoutRoute = AppAuthOnboardingLayoutImport.update({
@@ -172,13 +172,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLoginLayoutImport
       parentRoute: typeof AppLoginRoute
     }
-    '/_app/ourfiles/': {
-      id: '/_app/ourfiles/'
-      path: '/ourfiles'
-      fullPath: '/ourfiles'
-      preLoaderRoute: typeof AppOurfilesIndexImport
-      parentRoute: typeof AppImport
-    }
     '/_app/video-to-markdown/': {
       id: '/_app/video-to-markdown/'
       path: '/video-to-markdown'
@@ -213,6 +206,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/onboarding'
       preLoaderRoute: typeof AppAuthOnboardingLayoutImport
       parentRoute: typeof AppAuthOnboardingRoute
+    }
+    '/_app/_auth/ourfiles/': {
+      id: '/_app/_auth/ourfiles/'
+      path: '/ourfiles'
+      fullPath: '/ourfiles'
+      preLoaderRoute: typeof AppAuthOurfilesIndexImport
+      parentRoute: typeof AppAuthImport
     }
     '/_app/login/_layout/': {
       id: '/_app/login/_layout/'
@@ -288,13 +288,13 @@ export const routeTree = rootRoute.addChildren({
           AppAuthOnboardingLayoutUsernameRoute,
         }),
       }),
+      AppAuthOurfilesIndexRoute,
     }),
     AppLoginRoute: AppLoginRoute.addChildren({
       AppLoginLayoutRoute: AppLoginLayoutRoute.addChildren({
         AppLoginLayoutIndexRoute,
       }),
     }),
-    AppOurfilesIndexRoute,
     AppVideoToMarkdownIndexRoute,
   }),
 })
@@ -319,7 +319,6 @@ export const routeTree = rootRoute.addChildren({
       "children": [
         "/_app/_auth",
         "/_app/login",
-        "/_app/ourfiles/",
         "/_app/video-to-markdown/"
       ]
     },
@@ -328,7 +327,8 @@ export const routeTree = rootRoute.addChildren({
       "parent": "/_app",
       "children": [
         "/_app/_auth/dashboard",
-        "/_app/_auth/onboarding"
+        "/_app/_auth/onboarding",
+        "/_app/_auth/ourfiles/"
       ]
     },
     "/_app/login": {
@@ -344,10 +344,6 @@ export const routeTree = rootRoute.addChildren({
       "children": [
         "/_app/login/_layout/"
       ]
-    },
-    "/_app/ourfiles/": {
-      "filePath": "_app/ourfiles/index.tsx",
-      "parent": "/_app"
     },
     "/_app/video-to-markdown/": {
       "filePath": "_app/video-to-markdown/index.tsx",
@@ -382,6 +378,10 @@ export const routeTree = rootRoute.addChildren({
       "children": [
         "/_app/_auth/onboarding/_layout/username"
       ]
+    },
+    "/_app/_auth/ourfiles/": {
+      "filePath": "_app/_auth/ourfiles/index.tsx",
+      "parent": "/_app/_auth"
     },
     "/_app/login/_layout/": {
       "filePath": "_app/login/_layout.index.tsx",
