@@ -115,13 +115,21 @@ const schema = defineSchema({
       v.object({
         kind: v.literal("generating"),
         image: imageObject,
-        prompt: v.string(),
+        generationSettings: v.object({
+          prompt: v.string(),
+          loraUrl: v.string(),
+          styleId: v.optional(v.string()),
+        }),
       }),
       v.object({
         kind: v.literal("generated"),
         image: imageObject,
         decoratedImage: imageObject,
-        prompt: v.string(),
+        generationSettings: v.object({
+          prompt: v.string(),
+          loraUrl: v.string(),
+          styleId: v.optional(v.string()),
+        }),
       }),
     ),
   }).index("by_user", ["userId"]),

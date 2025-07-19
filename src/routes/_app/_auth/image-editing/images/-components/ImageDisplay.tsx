@@ -3,6 +3,7 @@ import { UploadingImage } from "./UploadingImage";
 import { UploadedImage } from "./UploadedImage";
 import { GeneratingImage } from "./GeneratingImage";
 import { GeneratedImage } from "./GeneratedImage";
+import type { GenerationSettings } from "@/types/canvas";
 
 interface ImageDisplayProps {
   imageId: Id<"images">;
@@ -10,7 +11,7 @@ interface ImageDisplayProps {
     kind: "uploading" | "uploaded" | "generating" | "generated";
     image?: { url: string };
     decoratedImage?: { url: string };
-    prompt?: string;
+    generationSettings?: GenerationSettings;
   };
 }
 
@@ -24,18 +25,18 @@ export function ImageDisplay({ imageId, status }: ImageDisplayProps) {
           <UploadedImage imageUrl={status.image.url} />
         )}
 
-        {status.kind === "generating" && status.image && status.prompt && (
-          <GeneratingImage imageUrl={status.image.url} prompt={status.prompt} />
+        {status.kind === "generating" && status.image && status.generationSettings && (
+          <GeneratingImage imageUrl={status.image.url} prompt={status.generationSettings.prompt} />
         )}
 
         {status.kind === "generated" &&
           status.image &&
           status.decoratedImage &&
-          status.prompt && (
+          status.generationSettings && (
             <GeneratedImage
               originalImageUrl={status.image.url}
               decoratedImageUrl={status.decoratedImage.url}
-              prompt={status.prompt}
+              prompt={status.generationSettings.prompt}
             />
           )}
       </div>

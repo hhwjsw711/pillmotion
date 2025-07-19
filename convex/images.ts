@@ -64,7 +64,11 @@ async function validateImageAccess(ctx: any, imageId: any, userId: string) {
 export const startGeneration = mutation({
   args: {
     imageId: v.id("images"),
-    prompt: v.string(),
+    generationSettings: v.object({
+      prompt: v.string(),
+      loraUrl: v.string(),
+      styleId: v.optional(v.string()),
+    }),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -84,7 +88,7 @@ export const startGeneration = mutation({
       );
 
     await ctx.db.patch(args.imageId, {
-      status: { kind: "generating", image: imageObj, prompt: args.prompt },
+      status: { kind: "generating", image: imageObj, generationSettings: args.generationSettings },
     });
 
     // Schedule the AI generation
@@ -94,7 +98,7 @@ export const startGeneration = mutation({
       {
         imageId: args.imageId,
         image: imageObj,
-        prompt: args.prompt,
+        generationSettings: args.generationSettings,
       },
     );
   },
@@ -103,7 +107,11 @@ export const startGeneration = mutation({
 export const startRegeneration = mutation({
   args: {
     imageId: v.id("images"),
-    prompt: v.string(),
+    generationSettings: v.object({
+      prompt: v.string(),
+      loraUrl: v.string(),
+      styleId: v.optional(v.string()),
+    }),
     baseImage: v.union(v.literal("original"), v.literal("decorated")),
   },
   handler: async (ctx, args) => {
@@ -137,7 +145,7 @@ export const startRegeneration = mutation({
       status: {
         kind: "generating",
         image: image.status.image,
-        prompt: args.prompt,
+        generationSettings: args.generationSettings,
       },
     });
 
@@ -148,7 +156,7 @@ export const startRegeneration = mutation({
       {
         imageId: args.imageId,
         image: baseImageObj,
-        prompt: args.prompt,
+        generationSettings: args.generationSettings,
         shouldDeletePreviousDecorated: args.baseImage === "decorated",
       },
     );
@@ -180,7 +188,11 @@ export const finishGeneration = internalMutation({
     imageId: v.id("images"),
     image: v.object({ url: v.string(), storageId: v.id("_storage") }),
     decoratedImage: v.object({ url: v.string(), storageId: v.id("_storage") }),
-    prompt: v.string(),
+    generationSettings: v.object({
+      prompt: v.string(),
+      loraUrl: v.string(),
+      styleId: v.optional(v.string()),
+    }),
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.imageId, {
@@ -188,7 +200,7 @@ export const finishGeneration = internalMutation({
         kind: "generated",
         image: args.image,
         decoratedImage: args.decoratedImage,
-        prompt: args.prompt,
+        generationSettings: args.generationSettings,
       },
     });
   },

@@ -13,29 +13,36 @@ export const generateDecoratedImage = internalAction({
   args: {
     imageId: v.id("images"),
     image: v.object({ url: v.string(), storageId: v.id("_storage") }),
-    prompt: v.string(),
+    generationSettings: v.object({
+      prompt: v.string(),
+      loraUrl: v.string(),
+      styleId: v.optional(v.string()),
+    }),
     shouldDeletePreviousDecorated: v.optional(v.boolean()),
   },
   handler: async (
     ctx,
-    { imageId, image, prompt, shouldDeletePreviousDecorated = false },
+    { imageId, image, generationSettings, shouldDeletePreviousDecorated = false },
   ) => {
     console.log(`[generateDecoratedImage] Starting for image`, {
       imageId,
       image,
-      prompt,
+      generationSettings,
     });
+
+    const loras = generationSettings.loraUrl ? [{ path: generationSettings.loraUrl, scale: 1 }] : [];
 
     const result = await fal.subscribe("fal-ai/flux-kontext-lora", {
       input: {
         image_url: image.url,
-        prompt: prompt,
+        prompt: generationSettings.prompt,
         num_inference_steps: 30,
         guidance_scale: 2.5,
         num_images: 1,
         enable_safety_checker: true,
         output_format: "png",
         resolution_mode: "match_input",
+        loras,
       },
     });
 
@@ -93,7 +100,7 @@ export const generateDecoratedImage = internalAction({
         imageId,
         image: originalImage, // Always use the original image reference
         decoratedImage: { url, storageId },
-        prompt,
+        generationSettings,
       });
 
       // If we used the decorated image as base, delete it now that we have a new one
