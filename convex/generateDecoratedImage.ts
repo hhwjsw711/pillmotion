@@ -32,7 +32,7 @@ export const generateDecoratedImage = internalAction({
 
     const loras = generationSettings.loraUrl ? [{ path: generationSettings.loraUrl, scale: 1 }] : [];
 
-    const result = await fal.subscribe("fal-ai/flux-kontext-lora", {
+    const stream = await fal.stream("fal-ai/flux-kontext-lora", {
       input: {
         image_url: image.url,
         prompt: generationSettings.prompt,
@@ -45,6 +45,9 @@ export const generateDecoratedImage = internalAction({
         loras,
       },
     });
+
+    // Get the final result
+    const result = await stream.done();
 
     // Handle different possible response structures
     const resultData = (result as any).data || result;

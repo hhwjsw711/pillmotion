@@ -29,7 +29,7 @@ export function ImageCard({ image }: ImageCardProps) {
   // Prompt is only present for generating/generated
   const prompt =
     image.status.kind === "generating" || image.status.kind === "generated"
-      ? image.status.prompt
+      ? image.status.generationSettings.prompt
       : undefined;
 
   return (
