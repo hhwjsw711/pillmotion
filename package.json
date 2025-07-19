@@ -6,7 +6,7 @@
   "scripts": {
     "start": "npm run dev",
     "dev": "npm-run-all --parallel dev:frontend dev:backend",
-    "dev:frontend": "vite",
+    "dev:frontend": "vite --host",
     "dev:backend": "convex dev",
     "predev": "convex dev --run init --until-success",
     "build": "tsc -b && vite build",
@@ -15,11 +15,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@auth/core": "^0.34.1",
-    "@convex-dev/auth": "^0.0.43",
+    "@auth/core": "^0.37.0",
+    "@convex-dev/auth": "^0.0.87",
     "@convex-dev/r2": "^0.7.0",
     "@convex-dev/react-query": "^0.0.0-alpha.3",
     "@epic-web/client-hints": "^1.3.2",
+    "@fal-ai/client": "^1.6.0",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-dropdown-menu": "^2.1.1",
     "@radix-ui/react-select": "^2.1.1",
@@ -49,10 +50,12 @@
     "react-helmet-async": "^2.0.5",
     "react-i18next": "^15.0.0",
     "resend": "^3.2.0",
+    "sharp": "^0.34.3",
     "sonner": "^2.0.6",
     "stripe": "^16.6.0",
     "tailwind-merge": "^2.4.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "ts-pattern": "^5.7.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.8.0",

@@ -18,12 +18,15 @@ import { Route as IndexImport } from './routes/index'
 import { Route as AppAuthImport } from './routes/_app/_auth'
 import { Route as AppVideoToMarkdownIndexImport } from './routes/_app/video-to-markdown/index'
 import { Route as AppLoginLayoutImport } from './routes/_app/login/_layout'
+import { Route as AppAuthImageEditingRouteImport } from './routes/_app/_auth/image-editing/route'
 import { Route as AppLoginLayoutIndexImport } from './routes/_app/login/_layout.index'
 import { Route as AppAuthOurfilesIndexImport } from './routes/_app/_auth/ourfiles/index'
+import { Route as AppAuthImageEditingIndexImport } from './routes/_app/_auth/image-editing/index'
 import { Route as AppAuthOnboardingLayoutImport } from './routes/_app/_auth/onboarding/_layout'
 import { Route as AppAuthDashboardLayoutImport } from './routes/_app/_auth/dashboard/_layout'
 import { Route as AppAuthDashboardLayoutIndexImport } from './routes/_app/_auth/dashboard/_layout.index'
 import { Route as AppAuthOnboardingLayoutUsernameImport } from './routes/_app/_auth/onboarding/_layout.username'
+import { Route as AppAuthImageEditingImagesImageIdImport } from './routes/_app/_auth/image-editing/images/$imageId'
 import { Route as AppAuthDashboardLayoutSettingsImport } from './routes/_app/_auth/dashboard/_layout.settings'
 import { Route as AppAuthDashboardLayoutCheckoutImport } from './routes/_app/_auth/dashboard/_layout.checkout'
 import { Route as AppAuthDashboardLayoutSettingsIndexImport } from './routes/_app/_auth/dashboard/_layout.settings.index'
@@ -77,6 +80,11 @@ const AppLoginLayoutRoute = AppLoginLayoutImport.update({
   getParentRoute: () => AppLoginRoute,
 } as any)
 
+const AppAuthImageEditingRouteRoute = AppAuthImageEditingRouteImport.update({
+  path: '/image-editing',
+  getParentRoute: () => AppAuthRoute,
+} as any)
+
 const AppLoginLayoutIndexRoute = AppLoginLayoutIndexImport.update({
   path: '/',
   getParentRoute: () => AppLoginLayoutRoute,
@@ -85,6 +93,11 @@ const AppLoginLayoutIndexRoute = AppLoginLayoutIndexImport.update({
 const AppAuthOurfilesIndexRoute = AppAuthOurfilesIndexImport.update({
   path: '/ourfiles/',
   getParentRoute: () => AppAuthRoute,
+} as any)
+
+const AppAuthImageEditingIndexRoute = AppAuthImageEditingIndexImport.update({
+  path: '/',
+  getParentRoute: () => AppAuthImageEditingRouteRoute,
 } as any)
 
 const AppAuthOnboardingLayoutRoute = AppAuthOnboardingLayoutImport.update({
@@ -107,6 +120,12 @@ const AppAuthOnboardingLayoutUsernameRoute =
   AppAuthOnboardingLayoutUsernameImport.update({
     path: '/username',
     getParentRoute: () => AppAuthOnboardingLayoutRoute,
+  } as any)
+
+const AppAuthImageEditingImagesImageIdRoute =
+  AppAuthImageEditingImagesImageIdImport.update({
+    path: '/images/$imageId',
+    getParentRoute: () => AppAuthImageEditingRouteRoute,
   } as any)
 
 const AppAuthDashboardLayoutSettingsRoute =
@@ -158,6 +177,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAuthImport
       parentRoute: typeof AppImport
     }
+    '/_app/_auth/image-editing': {
+      id: '/_app/_auth/image-editing'
+      path: '/image-editing'
+      fullPath: '/image-editing'
+      preLoaderRoute: typeof AppAuthImageEditingRouteImport
+      parentRoute: typeof AppAuthImport
+    }
     '/_app/login': {
       id: '/_app/login'
       path: '/login'
@@ -207,6 +233,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAuthOnboardingLayoutImport
       parentRoute: typeof AppAuthOnboardingRoute
     }
+    '/_app/_auth/image-editing/': {
+      id: '/_app/_auth/image-editing/'
+      path: '/'
+      fullPath: '/image-editing/'
+      preLoaderRoute: typeof AppAuthImageEditingIndexImport
+      parentRoute: typeof AppAuthImageEditingRouteImport
+    }
     '/_app/_auth/ourfiles/': {
       id: '/_app/_auth/ourfiles/'
       path: '/ourfiles'
@@ -234,6 +267,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/settings'
       preLoaderRoute: typeof AppAuthDashboardLayoutSettingsImport
       parentRoute: typeof AppAuthDashboardLayoutImport
+    }
+    '/_app/_auth/image-editing/images/$imageId': {
+      id: '/_app/_auth/image-editing/images/$imageId'
+      path: '/images/$imageId'
+      fullPath: '/image-editing/images/$imageId'
+      preLoaderRoute: typeof AppAuthImageEditingImagesImageIdImport
+      parentRoute: typeof AppAuthImageEditingRouteImport
     }
     '/_app/_auth/onboarding/_layout/username': {
       id: '/_app/_auth/onboarding/_layout/username'
@@ -272,6 +312,10 @@ export const routeTree = rootRoute.addChildren({
   IndexRoute,
   AppRoute: AppRoute.addChildren({
     AppAuthRoute: AppAuthRoute.addChildren({
+      AppAuthImageEditingRouteRoute: AppAuthImageEditingRouteRoute.addChildren({
+        AppAuthImageEditingIndexRoute,
+        AppAuthImageEditingImagesImageIdRoute,
+      }),
       AppAuthDashboardRoute: AppAuthDashboardRoute.addChildren({
         AppAuthDashboardLayoutRoute: AppAuthDashboardLayoutRoute.addChildren({
           AppAuthDashboardLayoutCheckoutRoute,
@@ -326,9 +370,18 @@ export const routeTree = rootRoute.addChildren({
       "filePath": "_app/_auth.tsx",
       "parent": "/_app",
       "children": [
+        "/_app/_auth/image-editing",
         "/_app/_auth/dashboard",
         "/_app/_auth/onboarding",
         "/_app/_auth/ourfiles/"
+      ]
+    },
+    "/_app/_auth/image-editing": {
+      "filePath": "_app/_auth/image-editing/route.tsx",
+      "parent": "/_app/_auth",
+      "children": [
+        "/_app/_auth/image-editing/",
+        "/_app/_auth/image-editing/images/$imageId"
       ]
     },
     "/_app/login": {
@@ -379,6 +432,10 @@ export const routeTree = rootRoute.addChildren({
         "/_app/_auth/onboarding/_layout/username"
       ]
     },
+    "/_app/_auth/image-editing/": {
+      "filePath": "_app/_auth/image-editing/index.tsx",
+      "parent": "/_app/_auth/image-editing"
+    },
     "/_app/_auth/ourfiles/": {
       "filePath": "_app/_auth/ourfiles/index.tsx",
       "parent": "/_app/_auth"
@@ -398,6 +455,10 @@ export const routeTree = rootRoute.addChildren({
         "/_app/_auth/dashboard/_layout/settings/billing",
         "/_app/_auth/dashboard/_layout/settings/"
       ]
+    },
+    "/_app/_auth/image-editing/images/$imageId": {
+      "filePath": "_app/_auth/image-editing/images/$imageId.tsx",
+      "parent": "/_app/_auth/image-editing"
     },
     "/_app/_auth/onboarding/_layout/username": {
       "filePath": "_app/_auth/onboarding/_layout.username.tsx",

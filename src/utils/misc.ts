@@ -42,3 +42,11 @@ export const useSignOut = () => {
     navigate({ to: "/login" });
   };
 };
+
+/**
+ * Detects if the current device is a mobile/touch device
+ * @returns true if the device supports touch input, false otherwise
+ */
+export function isMobile(): boolean {
+  return "ontouchstart" in window || navigator.maxTouchPoints > 0;
+}
