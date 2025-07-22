@@ -3,7 +3,7 @@ import VideoForm from "./-components/VideoForm";
 import VideosList from "./-components/VideosList";
 import ConvexCorner from "./-components/ConvexCorner";
 
-export const Route = createFileRoute("/_app/video-to-markdown/")({
+export const Route = createFileRoute("/_app/_auth/video-to-markdown/")({
   component: VideoToMarkdown,
 });
 

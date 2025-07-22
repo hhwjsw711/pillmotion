@@ -16,10 +16,10 @@ import { Route as rootRoute } from './routes/__root'
 import { Route as AppImport } from './routes/_app'
 import { Route as IndexImport } from './routes/index'
 import { Route as AppAuthImport } from './routes/_app/_auth'
-import { Route as AppVideoToMarkdownIndexImport } from './routes/_app/video-to-markdown/index'
 import { Route as AppLoginLayoutImport } from './routes/_app/login/_layout'
 import { Route as AppAuthImageEditingRouteImport } from './routes/_app/_auth/image-editing/route'
 import { Route as AppLoginLayoutIndexImport } from './routes/_app/login/_layout.index'
+import { Route as AppAuthVideoToMarkdownIndexImport } from './routes/_app/_auth/video-to-markdown/index'
 import { Route as AppAuthOurfilesIndexImport } from './routes/_app/_auth/ourfiles/index'
 import { Route as AppAuthImageEditingIndexImport } from './routes/_app/_auth/image-editing/index'
 import { Route as AppAuthOnboardingLayoutImport } from './routes/_app/_auth/onboarding/_layout'
@@ -70,11 +70,6 @@ const AppAuthDashboardRoute = AppAuthDashboardImport.update({
   getParentRoute: () => AppAuthRoute,
 } as any)
 
-const AppVideoToMarkdownIndexRoute = AppVideoToMarkdownIndexImport.update({
-  path: '/video-to-markdown/',
-  getParentRoute: () => AppRoute,
-} as any)
-
 const AppLoginLayoutRoute = AppLoginLayoutImport.update({
   id: '/_layout',
   getParentRoute: () => AppLoginRoute,
@@ -89,6 +84,12 @@ const AppLoginLayoutIndexRoute = AppLoginLayoutIndexImport.update({
   path: '/',
   getParentRoute: () => AppLoginLayoutRoute,
 } as any)
+
+const AppAuthVideoToMarkdownIndexRoute =
+  AppAuthVideoToMarkdownIndexImport.update({
+    path: '/video-to-markdown/',
+    getParentRoute: () => AppAuthRoute,
+  } as any)
 
 const AppAuthOurfilesIndexRoute = AppAuthOurfilesIndexImport.update({
   path: '/ourfiles/',
@@ -198,13 +199,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLoginLayoutImport
       parentRoute: typeof AppLoginRoute
     }
-    '/_app/video-to-markdown/': {
-      id: '/_app/video-to-markdown/'
-      path: '/video-to-markdown'
-      fullPath: '/video-to-markdown'
-      preLoaderRoute: typeof AppVideoToMarkdownIndexImport
-      parentRoute: typeof AppImport
-    }
     '/_app/_auth/dashboard': {
       id: '/_app/_auth/dashboard'
       path: '/dashboard'
@@ -245,6 +239,13 @@ declare module '@tanstack/react-router' {
       path: '/ourfiles'
       fullPath: '/ourfiles'
       preLoaderRoute: typeof AppAuthOurfilesIndexImport
+      parentRoute: typeof AppAuthImport
+    }
+    '/_app/_auth/video-to-markdown/': {
+      id: '/_app/_auth/video-to-markdown/'
+      path: '/video-to-markdown'
+      fullPath: '/video-to-markdown'
+      preLoaderRoute: typeof AppAuthVideoToMarkdownIndexImport
       parentRoute: typeof AppAuthImport
     }
     '/_app/login/_layout/': {
@@ -333,13 +334,13 @@ export const routeTree = rootRoute.addChildren({
         }),
       }),
       AppAuthOurfilesIndexRoute,
+      AppAuthVideoToMarkdownIndexRoute,
     }),
     AppLoginRoute: AppLoginRoute.addChildren({
       AppLoginLayoutRoute: AppLoginLayoutRoute.addChildren({
         AppLoginLayoutIndexRoute,
       }),
     }),
-    AppVideoToMarkdownIndexRoute,
   }),
 })
 
@@ -362,8 +363,7 @@ export const routeTree = rootRoute.addChildren({
       "filePath": "_app.tsx",
       "children": [
         "/_app/_auth",
-        "/_app/login",
-        "/_app/video-to-markdown/"
+        "/_app/login"
       ]
     },
     "/_app/_auth": {
@@ -373,7 +373,8 @@ export const routeTree = rootRoute.addChildren({
         "/_app/_auth/image-editing",
         "/_app/_auth/dashboard",
         "/_app/_auth/onboarding",
-        "/_app/_auth/ourfiles/"
+        "/_app/_auth/ourfiles/",
+        "/_app/_auth/video-to-markdown/"
       ]
     },
     "/_app/_auth/image-editing": {
@@ -397,10 +398,6 @@ export const routeTree = rootRoute.addChildren({
       "children": [
         "/_app/login/_layout/"
       ]
-    },
-    "/_app/video-to-markdown/": {
-      "filePath": "_app/video-to-markdown/index.tsx",
-      "parent": "/_app"
     },
     "/_app/_auth/dashboard": {
       "filePath": "_app/_auth/dashboard",
@@ -438,6 +435,10 @@ export const routeTree = rootRoute.addChildren({
     },
     "/_app/_auth/ourfiles/": {
       "filePath": "_app/_auth/ourfiles/index.tsx",
+      "parent": "/_app/_auth"
+    },
+    "/_app/_auth/video-to-markdown/": {
+      "filePath": "_app/_auth/video-to-markdown/index.tsx",
       "parent": "/_app/_auth"
     },
     "/_app/login/_layout/": {
